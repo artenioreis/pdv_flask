@@ -8,6 +8,7 @@ import json
 from functools import wraps
 import pandas as pd
 import io
+from sqlalchemy import or_ # Importa or_ explicitamente para clareza
 
 main_bp = Blueprint('main', __name__)
 
@@ -166,38 +167,63 @@ def pdv():
 def pdv_search_product():
     """
     Endpoint para buscar produtos por ID, nome ou código de barras para o PDV.
-    Retorna uma lista de produtos em formato JSON, incluindo o ID.
+    Implementa busca robusta com validação e priorização.
     """
-    from models import Product
+    from models import Product # Importa Product aqui para evitar importação circular
     query = request.args.get('query', '').strip()
+
+    # 1. Validação da Query
     if not query:
+        # Retorna uma lista vazia se a query estiver vazia, sem erro.
         return jsonify([])
 
-    search_conditions = []
+    # 2. Construção das Condições de Busca
+    search_filters = []
 
-    # Tenta buscar por ID (se a query for um número)
+    # Tenta buscar por ID (prioridade alta se for um número exato)
     try:
         product_id = int(query)
-        search_conditions.append(Product.id == product_id)
+        # Se a query é um número, busca por ID exato.
+        # Poderíamos adicionar uma condição para retornar apenas este produto se encontrado,
+        # mas para uma busca "geral", combinamos com OR.
+        search_filters.append(Product.id == product_id)
     except ValueError:
-        pass # Não é um ID numérico, continua para outras buscas
+        # Se não for um número, não é um ID válido, então não adiciona a condição de ID.
+        pass
 
-    # Busca por nome (parcial e insensível a maiúsculas/minúsculas)
-    search_conditions.append(Product.name.ilike(f'%{query}%'))
+    # Busca por Código de Barras (busca exata)
+    # Códigos de barras são geralmente strings exatas.
+    search_filters.append(Product.barcode == query)
 
-    # Busca por código de barras (exata)
-    search_conditions.append(Product.barcode == query)
+    # Busca por Nome (parcial e insensível a maiúsculas/minúsculas)
+    # Usamos ilike para compatibilidade com diferentes bancos de dados para busca insensível a maiúsculas/minúsculas.
+    search_filters.append(Product.name.ilike(f'%{query}%'))
 
-    # Combina as condições com OR
-    products = Product.query.filter(db.or_(*search_conditions)).limit(10).all()
+    # 3. Execução da Consulta
+    # Combina todas as condições com OR.
+    # Se a query for um ID, ele será encontrado. Se for um código de barras, será encontrado.
+    # Se for parte de um nome, será encontrado.
+    # A ordem das condições no OR não afeta o resultado, mas pode afetar ligeiramente a performance
+    # dependendo do otimizador do banco de dados.
+    products = Product.query.filter(or_(*search_filters)).limit(10).all()
 
-    results = [{
-        'id': p.id,
-        'name': p.name,
-        'price': p.price,
-        'stock': p.stock,
-        'barcode': p.barcode
-    } for p in products]
+    # 4. Formatação e Retorno dos Resultados
+    results = []
+    for p in products:
+        results.append({
+            'id': p.id,
+            'name': p.name,
+            'price': p.price,
+            'stock': p.stock,
+            'barcode': p.barcode
+        })
+
+    # 5. Verificação de Validação (Opcional, para logs ou depuração)
+    if not results and query:
+        current_app.logger.info(f"Nenhum produto encontrado para a busca: '{query}'")
+    elif results:
+        current_app.logger.debug(f"Produtos encontrados para '{query}': {[p['name'] for p in results]}")
+
     return jsonify(results)
 
 @main_bp.route('/pdv/checkout', methods=['POST'])
@@ -518,4 +544,3 @@ def import_products():
             return redirect(url_for('main.import_products'))
 
     return render_template('import_products.html', title='Importar Produtos', form=form)
-
