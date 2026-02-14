@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}PDV{% endblock %}
+{% block content %}
+<h1 class="mb-4">Ponto de Venda</h1>
+
+<div class="row">
+    <div class="col-md-7">
+        <div class="card mb-4">
+            <div class="card-header">
+                Adicionar Produto
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label for="productSearch">Buscar Produto (Nome ou Código de Barras):</label>
+                    <input type="text" class="form-control" id="productSearch" placeholder="Digite o nome ou código de barras">
+                    <div id="searchResults" class="list-group mt-2" style="max-height: 200px; overflow-y: auto;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                Itens do Carrinho
+            </div>
+            <div class="card-body">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Produto</th>
+                            <th>Qtd</th>
+                            <th>Preço Unit.</th>
+                            <th>Subtotal</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cartItems">
+                        <!-- Itens do carrinho serão adicionados aqui via JS -->
+                        <tr>
+                            <td colspan="5" class="text-center">Nenhum item no carrinho.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header">
+                Resumo da Venda
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <h5>Total:</h5>
+                    <h5 id="cartTotal">R$ 0.00</h5>
+                </div>
+                <hr>
+                <div class="form-group">
+                    <label for="paymentMethod">Método de Pagamento:</label>
+                    <select class="form-control" id="paymentMethod">
+                        <option value="Dinheiro">Dinheiro</option>
+                        <option value="Cartao">Cartão</option>
+                        <option value="Pix">Pix</option>
+                    </select>
+                </div>
+                <button class="btn btn-success btn-block mt-3" id="checkoutBtn">Finalizar Venda</button>
+                <button class="btn btn-danger btn-block mt-2" id="clearCartBtn">Limpar Carrinho</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para exibir o cupom -->
+<div class="modal fade" id="receiptModal" tabindex="-1" aria-labelledby="receiptModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="receiptModalLabel">Cupom Não Fiscal</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="receiptContent">
+                <!-- Conteúdo do cupom será carregado aqui -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-primary" id="printReceiptBtn">Imprimir</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/pdv.js') }}"></script>
+{% endblock %}

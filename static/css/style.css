@@ -1,0 +1,24 @@
+body {
+    padding-top: 56px; /* Para compensar a navbar fixa */
+}
+.navbar-brand img {
+    margin-right: 8px;
+}
+.alert {
+    margin-top: 15px;
+}
+/* Estilos para o PDV */
+#searchResults {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+#searchResults .list-group-item {
+    cursor: pointer;
+}
+#searchResults .list-group-item:hover {
+    background-color: #f8f9fa;
+}
+.receipt-modal-content {
+    width: 58mm; /* Largura da impressora térmica */
+    margin: 0 auto;
+}

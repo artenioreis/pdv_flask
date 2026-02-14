@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1 class="mb-4">Dashboard do Administrador</h1>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card text-white bg-primary mb-3">
+            <div class="card-header">Total de Produtos</div>
+            <div class="card-body">
+                <h5 class="card-title">{{ total_products }}</h5>
+                <p class="card-text">Produtos cadastrados no sistema.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-white bg-success mb-3">
+            <div class="card-header">Vendas Hoje</div>
+            <div class="card-body">
+                <h5 class="card-title">{{ total_sales_today }}</h5>
+                <p class="card-text">Número de vendas realizadas hoje.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-white bg-info mb-3">
+            <div class="card-header">Faturamento Hoje</div>
+            <div class="card-body">
+                <h5 class="card-title">R$ {{ "%.2f"|format(total_revenue_today) }}</h5>
+                <p class="card-text">Total de vendas brutas do dia.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                Ações Rápidas
+            </div>
+            <div class="card-body">
+                <a href="{{ url_for('main.add_product') }}" class="btn btn-outline-primary mr-2">Adicionar Produto</a>
+                <a href="{{ url_for('main.pdv') }}" class="btn btn-outline-success mr-2">Abrir PDV</a>
+                <a href="{{ url_for('main.reports') }}" class="btn btn-outline-info">Ver Relatórios</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

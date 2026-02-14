@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Relatórios{% endblock %}
+{% block content %}
+<h1 class="mb-4">Relatórios</h1>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                Relatório de Caixa
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label for="cashReportStartDate">Data Inicial:</label>
+                    <input type="date" class="form-control" id="cashReportStartDate">
+                </div>
+                <div class="form-group">
+                    <label for="cashReportEndDate">Data Final:</label>
+                    <input type="date" class="form-control" id="cashReportEndDate">
+                </div>
+                <button class="btn btn-primary btn-block" id="generateCashReportBtn">Gerar Relatório de Caixa</button>
+
+                <div id="cashReportResults" class="mt-4" style="display: none;">
+                    <h5>Resumo do Caixa</h5>
+                    <p>Vendas em Dinheiro: <strong id="cashSalesAmount"></strong></p>
+                    <p>Vendas em Cartão: <strong id="cardSalesAmount"></strong></p>
+                    <p>Vendas em Pix: <strong id="pixSalesAmount"></strong></p>
+                    <p>Total Geral de Vendas: <strong id="totalSalesAmount"></strong></p>
+
+                    <h6 class="mt-3">Detalhes das Vendas:</h6>
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                <th>ID Venda</th>
+                                <th>Data/Hora</th>
+                                <th>Valor</th>
+                                <th>Pagamento</th>
+                                <th>Operador</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cashSalesList">
+                            <!-- Detalhes das vendas aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                Relatório de Estoque
+            </div>
+            <div class="card-body">
+                <button class="btn btn-primary btn-block" id="generateStockReportBtn">Gerar Relatório de Estoque</button>
+
+                <div id="stockReportResults" class="mt-4" style="display: none;">
+                    <h5>Disponibilidade de Produtos</h5>
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                <th>Produto</th>
+                                <th>Estoque</th>
+                                <th>Preço</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stockList">
+                            <!-- Detalhes do estoque aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Relatório de Caixa
+        document.getElementById('generateCashReportBtn').addEventListener('click', function() {
+            const startDate = document.getElementById('cashReportStartDate').value;
+            const endDate = document.getElementById('cashReportEndDate').value;
+            fetch(`/reports/cash_flow?start_date=${startDate}&end_date=${endDate}`)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('cashSalesAmount').textContent = `R$ ${data.cash_sales.toFixed(2)}`;
+                    document.getElementById('cardSalesAmount').textContent = `R$ ${data.card_sales.toFixed(2)}`;
+                    document.getElementById('pixSalesAmount').textContent = `R$ ${data.pix_sales.toFixed(2)}`;
+                    document.getElementById('totalSalesAmount').textContent = `R$ ${data.total_sales.toFixed(2)}`;
+
+                    const salesListBody = document.getElementById('cashSalesList');
+                    salesListBody.innerHTML = '';
+                    if (data.sales_list.length === 0) {
+                        salesListBody.innerHTML = '<tr><td colspan="5" class="text-center">Nenhuma venda encontrada para o período.</td></tr>';
+                    } else {
+                        data.sales_list.forEach(sale => {
+                            const row = `
+                                <tr>
+                                    <td>${sale.id}</td>
+                                    <td>${sale.timestamp}</td>
+                                    <td>R$ ${sale.total_amount.toFixed(2)}</td>
+                                    <td>${sale.payment_method}</td>
+                                    <td>${sale.operator}</td>
+                                </tr>
+                            `;
+                            salesListBody.insertAdjacentHTML('beforeend', row);
+                        });
+                    }
+                    document.getElementById('cashReportResults').style.display = 'block';
+                })
+                .catch(error => console.error('Erro ao gerar relatório de caixa:', error));
+        });
+
+        // Relatório de Estoque
+        document.getElementById('generateStockReportBtn').addEventListener('click', function() {
+            fetch('/reports/stock')
+                .then(response => response.json())
+                .then(data => {
+                    const stockListBody = document.getElementById('stockList');
+                    stockListBody.innerHTML = '';
+                    if (data.length === 0) {
+                        stockListBody.innerHTML = '<tr><td colspan="3" class="text-center">Nenhum produto em estoque.</td></tr>';
+                    } else {
+                        data.forEach(product => {
+                            const row = `
+                                <tr>
+                                    <td>${product.name}</td>
+                                    <td>${product.stock}</td>
+                                    <td>R$ ${product.price.toFixed(2)}</td>
+                                </tr>
+                            `;
+                            stockListBody.insertAdjacentHTML('beforeend', row);
+                        });
+                    }
+                    document.getElementById('stockReportResults').style.display = 'block';
+                })
+                .catch(error => console.error('Erro ao gerar relatório de estoque:', error));
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,209 @@
+{# templates/import_products.html #}
+{% extends "base.html" %}
+{% block title %}Importar Produtos{% endblock %}
+
+{% block head_extra %}
+<style>
+    .table-responsive-scroll {
+        max-height: 400px; /* Altura máxima para a tabela com scroll */
+        overflow-y: auto;
+        border: 1px solid #dee2e6;
+    }
+    .table-import th, .table-import td {
+        padding: 0.5rem;
+        vertical-align: middle;
+    }
+    .table-import input {
+        border: none;
+        width: 100%;
+        padding: 0.375rem 0.75rem;
+        box-sizing: border-box;
+    }
+    .table-import input:focus {
+        outline: none;
+        box-shadow: none;
+    }
+    .table-import tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">Importar Produtos</h1>
+
+<div class="card mb-4">
+    <div class="card-header">Importar por Arquivo (CSV, XLSX, XLSM)</div>
+    <div class="card-body">
+        <p>Faça o upload de um arquivo CSV ou Excel (.xlsx, .xlsm) contendo os dados dos produtos.</p>
+        <p>As colunas esperadas no arquivo são (insensível a maiúsculas/minúsculas):</p>
+        <p><code>nome, codigo_barras, preco_venda, estoque_atual</code></p>
+        <form method="POST" enctype="multipart/form-data"> {# IMPORTANTE: enctype para upload de arquivo #}
+            {{ form.hidden_tag() }}
+            <div class="mb-3">
+                {{ form.file.label(class="form-label") }}
+                {{ form.file(class="form-control") }}
+                {% if form.file.errors %}
+                    {% for error in form.file.errors %}
+                        <span class="text-danger">{{ error }}</span>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            {{ form.submit(class="btn btn-primary") }}
+        </form>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">Importar por Tabela Manual (Colar Dados)</div>
+    <div class="card-body">
+        <p>Insira os dados dos produtos abaixo. Cada linha deve representar um produto, e as colunas devem ser separadas por vírgula (CSV) ou tabulação. A ordem esperada é:</p>
+        <p><code>Nome do Produto, Código de Barras, Preço de Venda, Estoque Atual</code></p>
+        <p>Exemplo:</p>
+        <pre>Camiseta Básica,1234567890123,29.90,100
+Calça Jeans,9876543210987,89.99,50</pre>
+        <p>Você pode colar dados de uma planilha (Excel, Google Sheets) diretamente no campo de texto abaixo.</p>
+        <div class="mb-3">
+            <label for="productDataInput" class="form-label">Colar dados dos produtos aqui:</label>
+            <textarea class="form-control" id="productDataInput" rows="8" placeholder="Cole seus dados de produto aqui (Nome, Código de Barras, Preço, Estoque)"></textarea>
+        </div>
+        <button id="parseDataBtn" class="btn btn-info mb-3">Visualizar na Tabela</button>
+        <button id="addRowBtn" class="btn btn-secondary mb-3 ms-2">Adicionar Linha Manualmente</button>
+
+        <form id="importForm" method="POST" action="{{ url_for('main.import_products') }}">
+            <input type="hidden" name="products_json" id="productsJsonInput">
+
+            <div class="table-responsive table-responsive-scroll mb-3">
+                <table class="table table-striped table-sm table-import">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Código de Barras</th>
+                            <th>Preço de Venda</th>
+                            <th>Estoque Atual</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productTableBody">
+                        <!-- Linhas de produto serão inseridas aqui pelo JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+
+            <button type="submit" class="btn btn-success" id="submitImportBtn" disabled>Importar Produtos da Tabela</button>
+            <a href="{{ url_for('main.products') }}" class="btn btn-secondary">Cancelar</a>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const productDataInput = document.getElementById('productDataInput');
+    const parseDataBtn = document.getElementById('parseDataBtn');
+    const addRowBtn = document.getElementById('addRowBtn');
+    const productTableBody = document.getElementById('productTableBody');
+    const productsJsonInput = document.getElementById('productsJsonInput');
+    const submitImportBtn = document.getElementById('submitImportBtn');
+
+    function addProductRow(product = { name: '', barcode: '', price: '', stock: '' }) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td><input type="text" class="form-control-plaintext" value="${product.name}" data-field="name" placeholder="Nome"></td>
+            <td><input type="text" class="form-control-plaintext" value="${product.barcode}" data-field="barcode" placeholder="Código de Barras"></td>
+            <td><input type="number" step="0.01" class="form-control-plaintext" value="${product.price}" data-field="price" placeholder="Preço"></td>
+            <td><input type="number" step="1" class="form-control-plaintext" value="${product.stock}" data-field="stock" placeholder="Estoque"></td>
+            <td><button type="button" class="btn btn-danger btn-sm remove-row-btn">Remover</button></td>
+        `;
+        productTableBody.appendChild(row);
+        updateSubmitButtonState();
+    }
+
+    parseDataBtn.addEventListener('click', function() {
+        const rawData = productDataInput.value.trim();
+        if (!rawData) {
+            alert('Por favor, cole os dados dos produtos no campo de texto.');
+            return;
+        }
+
+        productTableBody.innerHTML = '';
+        const lines = rawData.split('\n');
+
+        lines.forEach(line => {
+            const trimmedLine = line.trim();
+            if (trimmedLine) {
+                let parts = trimmedLine.split(',');
+                if (parts.length < 4) {
+                    parts = trimmedLine.split('\t');
+                }
+
+                if (parts.length >= 4) {
+                    addProductRow({
+                        name: parts[0].trim(),
+                        barcode: parts[1].trim(),
+                        price: parseFloat(parts[2].trim().replace(',', '.')) || 0,
+                        stock: parseInt(parts[3].trim()) || 0
+                    });
+                } else {
+                    console.warn('Linha ignorada devido a formato inválido:', trimmedLine);
+                }
+            }
+        });
+        updateSubmitButtonState();
+    });
+
+    addRowBtn.addEventListener('click', function() {
+        addProductRow();
+    });
+
+    productTableBody.addEventListener('click', function(event) {
+        if (event.target.classList.contains('remove-row-btn')) {
+            event.target.closest('tr').remove();
+            updateSubmitButtonState();
+        }
+    });
+
+    function updateSubmitButtonState() {
+        const rows = productTableBody.querySelectorAll('tr');
+        submitImportBtn.disabled = rows.length === 0;
+    }
+
+    document.getElementById('importForm').addEventListener('submit', function(event) {
+        const products = [];
+        productTableBody.querySelectorAll('tr').forEach(row => {
+            const name = row.querySelector('input[data-field="name"]').value.trim();
+            const barcode = row.querySelector('input[data-field="barcode"]').value.trim();
+            const priceInput = row.querySelector('input[data-field="price"]').value.replace(',', '.');
+            const stockInput = row.querySelector('input[data-field="stock"]').value;
+
+            const price = parseFloat(priceInput);
+            const stock = parseInt(stockInput);
+
+            if (name && barcode && !isNaN(price) && price >= 0 && !isNaN(stock) && stock >= 0) {
+                products.push({
+                    name: name,
+                    barcode: barcode,
+                    price: price,
+                    stock: stock
+                });
+            } else {
+                alert(`Erro de validação em um produto. Verifique os campos: Nome: "${name}", Código: "${barcode}", Preço: "${priceInput}", Estoque: "${stockInput}"`);
+                event.preventDefault();
+                return;
+            }
+        });
+
+        if (products.length === 0) {
+            alert('Nenhum produto válido para importar da tabela.');
+            event.preventDefault();
+            return;
+        }
+
+        productsJsonInput.value = JSON.stringify(products);
+    });
+
+    updateSubmitButtonState();
+});
+</script>
+{% endblock %}
