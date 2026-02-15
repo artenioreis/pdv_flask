@@ -1,31 +1,19 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body { font-family: 'Courier New', monospace; width: 58mm; font-size: 11px; margin: 0; padding: 5px; }
-        .center { text-align: center; }
-        .dashed { border-top: 1px dashed #000; margin: 5px 0; }
-        .bold { font-weight: bold; }
-    </style>
-</head>
-<body>
-    <div class="center">
+<div class="receipt-item" style="font-family: 'Courier New', monospace; width: 100%; font-size: 11px; color: #000; margin-bottom: 20px;">
+    <div style="text-align: center;">
         <strong>{{ company_name }}</strong><br>
-        <div class="dashed"></div>
+        <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
         CUPOM DE ITEM #{{ sale_id }}<br>
         {{ timestamp.strftime('%d/%m/%Y %H:%M:%S') }}
-        <div class="dashed"></div>
+        <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
     </div>
     <div>
         PRODUTO: {{ item.name }}<br>
         QTD: {{ item_quantity }} x R$ {{ "%.2f"|format(item_price) }}<br>
-        <span class="bold">SUBTOTAL: R$ {{ "%.2f"|format(item_subtotal) }}</span>
+        <span style="font-weight: bold;">SUBTOTAL: R$ {{ "%.2f"|format(item_subtotal) }}</span>
     </div>
-    <div class="dashed"></div>
-    <div class="center">
+    <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
+    <div style="text-align: center;">
         Pagamento: {{ payment_method }}<br>
         Obrigado e volte sempre!
     </div>
-</body>
-</html>
+</div>
