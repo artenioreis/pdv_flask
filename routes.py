@@ -479,7 +479,7 @@ def daily_sales_report():
     from models import db, Sale
     from datetime import timedelta, date
 
-    today = date.utcnow()
+    today = datetime.utcnow().date()
     dates = [(today - timedelta(days=i)) for i in range(6, -1, -1)]
 
     daily_revenue = []
