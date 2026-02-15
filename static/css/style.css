@@ -1,24 +1,202 @@
+/* static/css/style.css */
+
+/* Cores da Empresa (Substitua pelos seus valores) */
+:root {
+    --primary-color: #007bff; /* Azul vibrante */
+    --secondary-color: #28a745; /* Verde */
+    --background-light: #f8f9fa; /* Cinza claro */
+    --text-dark: #343a40; /* Cinza escuro */
+    --sidebar-bg: #343a40; /* Fundo da sidebar */
+    --sidebar-link-hover: #0056b3; /* Cor do link da sidebar ao passar o mouse */
+    --card-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
 body {
-    padding-top: 56px; /* Para compensar a navbar fixa */
+    font-family: 'Poppins', sans-serif;
+    background-color: var(--background-light);
+    color: var(--text-dark);
+    overflow-x: hidden; /* Evita scroll horizontal */
 }
-.navbar-brand img {
-    margin-right: 8px;
+
+#wrapper {
+    display: flex;
 }
-.alert {
-    margin-top: 15px;
+
+#sidebar-wrapper {
+    min-height: 100vh;
+    margin-left: -15rem;
+    transition: margin .25s ease-out;
+    background-color: var(--sidebar-bg) !important; /* Garante que o fundo seja escuro */
 }
+
+#sidebar-wrapper .sidebar-heading {
+    padding: 1.5rem 1.25rem;
+    font-size: 1.2rem;
+    color: white;
+    background-color: var(--primary-color); /* Cor de destaque para o cabeçalho da sidebar */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#sidebar-wrapper .list-group {
+    width: 15rem;
+}
+
+#sidebar-wrapper .list-group-item {
+    border: none;
+    padding: 1rem 1.25rem;
+    color: rgba(255, 255, 255, 0.7);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+#sidebar-wrapper .list-group-item:hover {
+    background-color: var(--sidebar-link-hover) !important;
+    color: white !important;
+}
+
+#sidebar-wrapper .list-group-item.active {
+    background-color: var(--primary-color) !important;
+    color: white !important;
+}
+
+#page-content-wrapper {
+    min-width: 100vw;
+}
+
+#wrapper.toggled #sidebar-wrapper {
+    margin-left: 0;
+}
+
+@media (min-width: 768px) {
+    #sidebar-wrapper {
+        margin-left: 0;
+    }
+
+    #page-content-wrapper {
+        min-width: 0;
+        width: 100%;
+    }
+
+    #wrapper.toggled #sidebar-wrapper {
+        margin-left: -15rem;
+    }
+}
+
+/* Navbar */
+.navbar {
+    padding: 1rem 1.5rem;
+    background-color: white !important;
+    border-bottom: 1px solid #e0e0e0;
+    box-shadow: var(--card-shadow);
+}
+
+.navbar .btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.navbar .btn-primary:hover {
+    background-color: var(--sidebar-link-hover);
+    border-color: var(--sidebar-link-hover);
+}
+
+/* Cards de Resumo no Dashboard */
+.card {
+    border: none;
+    border-radius: 0.5rem;
+    box-shadow: var(--card-shadow);
+}
+
+.card.bg-primary { background-color: var(--primary-color) !important; }
+.card.bg-success { background-color: var(--secondary-color) !important; }
+.card.bg-info { background-color: #17a2b8 !important; } /* Mantendo o info padrão do bootstrap ou defina um seu */
+
+.card-body .fa-3x {
+    opacity: 0.7;
+}
+
 /* Estilos para o PDV */
+#productSearch {
+    border-radius: 0.375rem;
+}
+
 #searchResults {
-    border: 1px solid #ddd;
-    border-radius: 4px;
+    border-radius: 0 0 0.375rem 0.375rem;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
-#searchResults .list-group-item {
-    cursor: pointer;
+
+.list-group-item-action:hover {
+    background-color: #e9ecef;
 }
-#searchResults .list-group-item:hover {
-    background-color: #f8f9fa;
+
+.cart-table-scroll {
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
 }
-.receipt-modal-content {
-    width: 58mm; /* Largura da impressora térmica */
-    margin: 0 auto;
+
+.quantity-input {
+    width: 80px !important;
+}
+
+/* Estilos para o modal de cupom */
+#receiptModal .modal-content {
+    border-radius: 0.5rem;
+}
+
+#receiptContent {
+    font-family: 'Courier New', Courier, monospace; /* Fonte monoespaçada para cupom */
+    font-size: 0.9em;
+    line-height: 1.4;
+    color: #333;
+}
+
+/* Outros ajustes gerais */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--text-dark);
+}
+
+.btn-success {
+    background-color: var(--secondary-color);
+    border-color: var(--secondary-color);
+}
+.btn-success:hover {
+    background-color: #218838; /* Um tom mais escuro do verde */
+    border-color: #1e7e34;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+.btn-primary:hover {
+    background-color: var(--sidebar-link-hover);
+    border-color: var(--sidebar-link-hover);
+}
+
+.btn-danger {
+    background-color: #dc3545;
+    border-color: #dc3545;
+}
+.btn-danger:hover {
+    background-color: #c82333;
+    border-color: #bd2130;
+}
+
+.btn-warning {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: var(--text-dark); /* Para garantir boa legibilidade */
+}
+.btn-warning:hover {
+    background-color: #e0a800;
+    border-color: #d39e00;
+}
+
+/* Ajustes para formulários */
+.form-control, .form-select {
+    border-radius: 0.375rem;
+}
+
+/* Flash messages */
+.alert {
+    border-radius: 0.375rem;
 }
