@@ -8,7 +8,7 @@ import json
 from functools import wraps
 import pandas as pd
 import io
-from sqlalchemy import or_ # Importa or_ explicitamente para clareza
+from sqlalchemy import or_
 
 main_bp = Blueprint('main', __name__)
 
@@ -172,9 +172,11 @@ def pdv_search_product():
     from models import Product # Importa Product aqui para evitar importação circular
     query = request.args.get('query', '').strip()
 
+    current_app.logger.debug(f"PDV Search: Recebida query '{query}'")
+
     # 1. Validação da Query
     if not query:
-        # Retorna uma lista vazia se a query estiver vazia, sem erro.
+        current_app.logger.debug("PDV Search: Query vazia, retornando resultados vazios.")
         return jsonify([])
 
     # 2. Construção das Condições de Busca
@@ -187,17 +189,21 @@ def pdv_search_product():
         # Poderíamos adicionar uma condição para retornar apenas este produto se encontrado,
         # mas para uma busca "geral", combinamos com OR.
         search_filters.append(Product.id == product_id)
+        current_app.logger.debug(f"PDV Search: Adicionada condição de busca por ID: {product_id}")
     except ValueError:
         # Se não for um número, não é um ID válido, então não adiciona a condição de ID.
+        current_app.logger.debug(f"PDV Search: Query '{query}' não é um ID numérico.")
         pass
 
     # Busca por Código de Barras (busca exata)
     # Códigos de barras são geralmente strings exatas.
     search_filters.append(Product.barcode == query)
+    current_app.logger.debug(f"PDV Search: Adicionada condição de busca por Código de Barras: '{query}'")
 
     # Busca por Nome (parcial e insensível a maiúsculas/minúsculas)
     # Usamos ilike para compatibilidade com diferentes bancos de dados para busca insensível a maiúsculas/minúsculas.
     search_filters.append(Product.name.ilike(f'%{query}%'))
+    current_app.logger.debug(f"PDV Search: Adicionada condição de busca por Nome (ilike): '%{query}%'")
 
     # 3. Execução da Consulta
     # Combina todas as condições com OR.
@@ -205,7 +211,19 @@ def pdv_search_product():
     # Se for parte de um nome, será encontrado.
     # A ordem das condições no OR não afeta o resultado, mas pode afetar ligeiramente a performance
     # dependendo do otimizador do banco de dados.
-    products = Product.query.filter(or_(*search_filters)).limit(10).all()
+
+    # Verifica se há filtros para evitar erro com or_() vazio
+    if not search_filters:
+        current_app.logger.warning("PDV Search: Nenhuma condição de busca válida foi gerada.")
+        return jsonify([])
+
+    try:
+        products = Product.query.filter(or_(*search_filters)).limit(10).all()
+        current_app.logger.debug(f"PDV Search: Query SQL executada. Encontrados {len(products)} produtos.")
+    except Exception as e:
+        current_app.logger.error(f"PDV Search: Erro ao executar query no banco de dados: {e}")
+        return jsonify({'error': 'Erro interno na busca de produtos.'}), 500
+
 
     # 4. Formatação e Retorno dos Resultados
     results = []
@@ -220,88 +238,99 @@ def pdv_search_product():
 
     # 5. Verificação de Validação (Opcional, para logs ou depuração)
     if not results and query:
-        current_app.logger.info(f"Nenhum produto encontrado para a busca: '{query}'")
+        current_app.logger.info(f"PDV Search: Nenhum produto encontrado para a busca: '{query}'")
     elif results:
-        current_app.logger.debug(f"Produtos encontrados para '{query}': {[p['name'] for p in results]}")
+        current_app.logger.debug(f"PDV Search: Produtos encontrados para '{query}': {[p['name'] for p in results]}")
 
     return jsonify(results)
 
 @main_bp.route('/pdv/checkout', methods=['POST'])
 @login_required
 def pdv_checkout():
+    """
+    Finaliza uma venda, processando os itens do carrinho, atualizando o estoque
+    e gerando um cupom não fiscal PARA CADA UNIDADE VENDIDA.
+    """
     from models import Product, Sale, SaleItem
     data = request.get_json()
     cart_items = data.get('cart', [])
     payment_method = data.get('payment_method')
-    total_amount = data.get('total_amount')
+    total_amount = data.get('total_amount') # Este total_amount será o total da venda, não do item
 
     if not cart_items or not payment_method or total_amount is None:
         return jsonify({'success': False, 'message': 'Dados da venda incompletos.'}), 400
 
     try:
+        # Cria uma venda "mãe" para agrupar todos os itens para fins de relatório
         new_sale = Sale(
-            total_amount=total_amount,
+            total_amount=total_amount, # Total da transação completa
             payment_method=payment_method,
             user_id=current_user.id
         )
         db.session.add(new_sale)
-        db.session.flush()
+        db.session.flush() # Obtém o ID da venda antes do commit final
 
-        list_of_receipt_htmls = []
+        list_of_receipt_htmls = [] # Lista para armazenar o HTML de cada cupom de unidade
 
+        # Itera sobre cada item no carrinho
         for item_data in cart_items:
             product_id = item_data['id']
-            quantity = item_data['quantity']
+            quantity_sold = item_data['quantity'] # Quantidade total deste produto no carrinho
             price_at_sale = item_data['price']
-            item_subtotal = round(quantity * price_at_sale, 2)
 
             product = Product.query.get(product_id)
             if not product:
                 db.session.rollback()
                 return jsonify({'success': False, 'message': f'Produto com ID {product_id} não encontrado.'}), 400
-            if product.stock < quantity:
+            if product.stock < quantity_sold: # Verifica o estoque para a quantidade total
                 db.session.rollback()
-                return jsonify({'success': False, 'message': f'Estoque insuficiente para {product.name}. Disponível: {product.stock}, Solicitado: {quantity}.'}), 400
+                return jsonify({'success': False, 'message': f'Estoque insuficiente para {product.name}. Disponível: {product.stock}, Solicitado: {quantity_sold}.'}), 400
 
+            # Atualiza o estoque do produto UMA VEZ para a quantidade total vendida
+            product.stock -= quantity_sold
+            db.session.add(product) # Adiciona a alteração de estoque para ser commitada
+
+            # Cria um item de venda associado à venda "mãe" para a quantidade total
             sale_item = SaleItem(
                 sale_id=new_sale.id,
                 product_id=product_id,
-                quantity=quantity,
+                quantity=quantity_sold, # Registra a quantidade total vendida deste item
                 price_at_sale=price_at_sale
             )
             db.session.add(sale_item)
 
-            product.stock -= quantity
+            # Geração do conteúdo do cupom não fiscal PARA CADA UNIDADE
+            # Este loop interno é o que garante um cupom por unidade
+            for i in range(quantity_sold):
+                # Para cada unidade, geramos um cupom individual
+                receipt_html = render_template('receipt.html',
+                                               sale_id=new_sale.id, # ID da venda mãe
+                                               item=item_data, # Dados do item (nome, barcode, etc.)
+                                               item_quantity=1, # A quantidade no cupom individual é sempre 1
+                                               item_price=price_at_sale,
+                                               item_subtotal=price_at_sale, # Subtotal para uma única unidade
+                                               payment_method=payment_method,
+                                               operator_username=current_user.username,
+                                               timestamp=datetime.utcnow(),
+                                               company_name=current_app.config['COMPANY_NAME'],
+                                               company_address=current_app.config['COMPANY_ADDRESS'],
+                                               company_phone=current_app.config['COMPANY_PHONE'],
+                                               company_cnpj=current_app.config['COMPANY_CNPJ'],
+                                               logo_path=current_app.config['LOGO_PATH'],
+                                               is_single_item_receipt=True # Flag para o template
+                                               )
+                list_of_receipt_htmls.append(receipt_html)
 
-            receipt_html = render_template('receipt.html',
-                                           sale_id=new_sale.id,
-                                           item=item_data,
-                                           item_quantity=quantity,
-                                           item_price=price_at_sale,
-                                           item_subtotal=item_subtotal,
-                                           payment_method=payment_method,
-                                           operator_username=current_user.username,
-                                           timestamp=datetime.utcnow(),
-                                           company_name=current_app.config['COMPANY_NAME'],
-                                           company_address=current_app.config['COMPANY_ADDRESS'],
-                                           company_phone=current_app.config['COMPANY_PHONE'],
-                                           company_cnpj=current_app.config['COMPANY_CNPJ'],
-                                           logo_path=current_app.config['LOGO_PATH'],
-                                           is_single_item_receipt=True
-                                           )
-            list_of_receipt_htmls.append(receipt_html)
-
-        db.session.commit()
+        db.session.commit() # Confirma todas as alterações no banco de dados
 
         return jsonify({'success': True, 'message': 'Venda realizada com sucesso!', 'receipt_htmls': list_of_receipt_htmls}), 200
 
     except Exception as e:
-        db.session.rollback()
+        db.session.rollback() # Em caso de erro, desfaz todas as operações no banco
         current_app.logger.error(f"Erro ao finalizar venda: {e}")
         return jsonify({'success': False, 'message': f'Erro interno ao processar a venda: {str(e)}'}), 500
 
 # --- Rotas de Relatórios (Admin Apenas) ---
-
 @main_bp.route('/reports')
 @admin_required
 def reports():

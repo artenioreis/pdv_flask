@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const cartItemsBody = document.getElementById('cartItems');
     const cartTotalSpan = document.getElementById('cartTotal');
     const paymentMethodSelect = document.getElementById('paymentMethod');
-    const checkoutBtn = document = document.getElementById('checkoutBtn');
+    const checkoutBtn = document.getElementById('checkoutBtn');
     const clearCartBtn = document.getElementById('clearCartBtn');
     const receiptModal = new bootstrap.Modal(document.getElementById('receiptModal'));
     const receiptContentDiv = document.getElementById('receiptContent');
@@ -48,13 +48,23 @@ document.addEventListener('DOMContentLoaded', function() {
         const existingItemIndex = cart.findIndex(item => item.id === product.id);
 
         if (existingItemIndex > -1) {
+            // Verifica se adicionar mais um item excederia o estoque
+            if (cart[existingItemIndex].quantity + 1 > product.stock) {
+                alert(`Estoque insuficiente para ${product.name}. Disponível: ${product.stock}`);
+                return;
+            }
             cart[existingItemIndex].quantity++;
         } else {
+            // Verifica se o estoque permite adicionar o primeiro item
+            if (product.stock < 1) {
+                alert(`Estoque insuficiente para ${product.name}. Disponível: ${product.stock}`);
+                return;
+            }
             cart.push({
                 id: product.id,
                 name: product.name,
                 price: product.price,
-                stock: product.stock,
+                stock: product.stock, // Armazena o estoque atual do produto
                 quantity: 1
             });
         }
@@ -68,14 +78,21 @@ document.addEventListener('DOMContentLoaded', function() {
         clearTimeout(searchTimeout);
         const query = this.value.trim();
 
-        if (query.length < 2) {
+        if (query.length < 2) { // Começa a buscar com pelo menos 2 caracteres
             searchResultsDiv.innerHTML = '';
             return;
         }
 
         searchTimeout = setTimeout(() => {
-            fetch(`/pdv/search_product?query=${query}`)
-                .then(response => response.json())
+            fetch(`/pdv/search_product?query=${encodeURIComponent(query)}`) // encodeURIComponent para caracteres especiais
+                .then(response => {
+                    if (!response.ok) {
+                        // Se a resposta não for OK (ex: 500 Internal Server Error)
+                        console.error('Erro na resposta da busca:', response.status, response.statusText);
+                        return response.json().then(err => { throw new Error(err.error || 'Erro desconhecido'); });
+                    }
+                    return response.json();
+                })
                 .then(products => {
                     searchResultsDiv.innerHTML = '';
                     if (products.length === 0) {
@@ -93,8 +110,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         });
                     }
                 })
-                .catch(error => console.error('Erro na busca de produtos:', error));
-        }, 300);
+                .catch(error => {
+                    console.error('Erro na requisição de busca de produtos:', error);
+                    searchResultsDiv.innerHTML = `<div class="list-group-item text-danger">Erro ao buscar produtos: ${error.message || error}</div>`;
+                });
+        }, 300); // Debounce de 300ms
+    });
+
+    // Esconde os resultados da busca ao clicar fora
+    document.addEventListener('click', function(event) {
+        if (!productSearchInput.contains(event.target) && !searchResultsDiv.contains(event.target)) {
+            searchResultsDiv.innerHTML = '';
+        }
     });
 
     cartItemsBody.addEventListener('click', function(event) {
@@ -109,13 +136,21 @@ document.addEventListener('DOMContentLoaded', function() {
         if (event.target.classList.contains('quantity-input')) {
             const index = parseInt(event.target.dataset.index);
             let newQuantity = parseInt(event.target.value);
+            const productInCart = cart[index];
 
             if (isNaN(newQuantity) || newQuantity < 1) {
-                newQuantity = 1;
+                newQuantity = 1; // Garante que a quantidade mínima seja 1
                 event.target.value = 1;
             }
 
-            cart[index].quantity = newQuantity;
+            // Verifica o estoque disponível (o estoque original do produto)
+            if (newQuantity > productInCart.stock) {
+                alert(`Estoque insuficiente para ${productInCart.name}. Disponível: ${productInCart.stock}`);
+                newQuantity = productInCart.stock; // Ajusta para o máximo disponível
+                event.target.value = productInCart.stock;
+            }
+
+            productInCart.quantity = newQuantity;
             updateCartDisplay();
         }
     });
@@ -140,22 +175,29 @@ document.addEventListener('DOMContentLoaded', function() {
                 total_amount: totalAmount
             })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                // Se a resposta não for OK, tenta ler a mensagem de erro do backend
+                return response.json().then(err => { throw new Error(err.message || 'Erro desconhecido ao finalizar venda'); });
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
                 alert(data.message);
-                cart = [];
+                cart = []; // Limpa o carrinho
                 updateCartDisplay();
-                currentReceipts = data.receipt_htmls;
+                currentReceipts = data.receipt_htmls; // Armazena a lista de HTMLs
 
-                if (currentReceipts.length > 0) {
+                if (currentReceipts && currentReceipts.length > 0) {
+                    // Ajusta o título e o conteúdo do modal para indicar múltiplos cupons
                     receiptModalLabel.textContent = `Cupons Gerados (${currentReceipts.length} itens)`;
                     receiptContentDiv.innerHTML = `
                         <p>Foram gerados <strong>${currentReceipts.length}</strong> cupons não fiscais para esta venda.</p>
                         <p>Clique em "Imprimir" para enviar todos os cupons para a impressora.</p>
                         <hr>
                         <h6>Pré-visualização do primeiro cupom:</h6>
-                        <div style="border: 1px solid #eee; padding: 10px; max-height: 300px; overflow-y: auto;">
+                        <div style="border: 1px solid #eee; padding: 10px; background-color: #f9f9f9; max-height: 250px; overflow-y: auto;">
                             ${currentReceipts[0]}
                         </div>
                     `;
@@ -169,7 +211,7 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .catch(error => {
             console.error('Erro na requisição de checkout:', error);
-            alert('Ocorreu um erro ao processar a venda.');
+            alert('Ocorreu um erro ao processar a venda: ' + error.message);
         });
     });
 
@@ -180,44 +222,31 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // --- Lógica de impressão ajustada para usar iframes temporários ---
     printReceiptBtn.addEventListener('click', function() {
         if (currentReceipts.length === 0) {
             alert('Nenhum cupom para imprimir.');
             return;
         }
 
-        // Função para imprimir um único cupom usando um iframe
-        function printSingleReceipt(receiptHtml) {
-            const iframe = document.createElement('iframe');
-            iframe.style.display = 'none'; // Oculta o iframe
-            document.body.appendChild(iframe); // Adiciona ao corpo do documento
-
-            const iframeDoc = iframe.contentWindow.document;
-            iframeDoc.open();
-            iframeDoc.write(receiptHtml); // Escreve o HTML do cupom no iframe
-            iframeDoc.close();
-
-            iframe.contentWindow.focus();
-            iframe.contentWindow.print(); // Imprime o conteúdo do iframe
-
-            // Remove o iframe após um pequeno atraso para garantir que a impressão foi iniciada
-            setTimeout(() => {
-                document.body.removeChild(iframe);
-            }, 1000); // 1 segundo de atraso
-        }
-
-        // Itera sobre cada cupom e o imprime com um pequeno atraso entre eles
-        // para evitar sobrecarregar a fila de impressão e o navegador
-        let delay = 0;
         currentReceipts.forEach((receiptHtml, index) => {
-            setTimeout(() => {
-                printSingleReceipt(receiptHtml);
-            }, delay);
-            delay += 1500; // Atraso de 1.5 segundos entre cada impressão
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write('<html><head><title>Cupom ' + (index + 1) + '</title>');
+            const styleMatch = receiptHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+            if (styleMatch && styleMatch[1]) {
+                printWindow.document.write('<style>' + styleMatch[1] + '</style>');
+            }
+            printWindow.document.write('</head><body>');
+            const bodyMatch = receiptHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+            if (bodyMatch && bodyMatch[1]) {
+                printWindow.document.write(bodyMatch[1]);
+            } else {
+                printWindow.document.write(receiptHtml);
+            }
+            printWindow.document.close();
+            printWindow.focus();
+            printWindow.print();
         });
-
-        receiptModal.hide(); // Fecha o modal após iniciar a impressão
+        receiptModal.hide();
     });
 
     updateCartDisplay();

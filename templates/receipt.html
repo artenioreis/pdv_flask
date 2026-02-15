@@ -1,130 +1,31 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cupom Não Fiscal</title>
     <style>
-        body {
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 12px;
-            width: 58mm; /* Largura para impressora térmica */
-            margin: 0 auto;
-            padding: 5px;
-            box-sizing: border-box;
-        }
-        .receipt-container {
-            border: 1px solid #ccc; /* Apenas para visualização no navegador */
-            padding: 10px;
-        }
-        .header, .footer {
-            text-align: center;
-            margin-bottom: 10px;
-        }
-        .header img {
-            max-width: 50mm; /* Ajuste para a largura da impressora */
-            height: auto;
-            margin-bottom: 5px;
-        }
-        .item-list {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 10px;
-        }
-        .item-list th, .item-list td {
-            text-align: left;
-            padding: 2px 0;
-            border-bottom: 1px dashed #ccc;
-        }
-        .item-list th:nth-child(1), .item-list td:nth-child(1) { width: 50%; } /* Produto */
-        .item-list th:nth-child(2), .item-list td:nth-child(2) { width: 15%; text-align: center; } /* Qtd */
-        .item-list th:nth-child(3), .item-list td:nth-child(3) { width: 15%; text-align: right; } /* Preço */
-        .item-list th:nth-child(4), .item-list td:nth-child(4) { width: 20%; text-align: right; } /* Subtotal */
-
-        .total-line {
-            text-align: right;
-            font-weight: bold;
-            margin-top: 5px;
-        }
-        .info-line {
-            margin-bottom: 3px;
-        }
-        .center-text {
-            text-align: center;
-        }
-        .dashed-line {
-            border-top: 1px dashed #000;
-            margin: 5px 0;
-        }
-        @media print {
-            body {
-                width: 58mm; /* Garante a largura na impressão */
-                margin: 0;
-                padding: 0;
-            }
-            .receipt-container {
-                border: none;
-                padding: 0;
-            }
-        }
+        body { font-family: 'Courier New', monospace; width: 58mm; font-size: 11px; margin: 0; padding: 5px; }
+        .center { text-align: center; }
+        .dashed { border-top: 1px dashed #000; margin: 5px 0; }
+        .bold { font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="receipt-container">
-        <div class="header">
-            {% if logo_path %}
-                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo da Empresa">
-            {% endif %}
-            <p class="info-line"><strong>{{ company_name }}</strong></p>
-            <p class="info-line">{{ company_address }}</p>
-            <p class="info-line">Tel: {{ company_phone }}</p>
-            <p class="info-line">CNPJ: {{ company_cnpj }}</p>
-            <div class="dashed-line"></div>
-            <p class="info-line">CUPOM NAO FISCAL</p>
-            <p class="info-line">VENDA: #{{ sale_id }}</p>
-            <p class="info-line">DATA: {{ timestamp.strftime('%d/%m/%Y %H:%M:%S') }}</p>
-            <p class="info-line">OPERADOR: {{ operator_username }}</p>
-            <div class="dashed-line"></div>
-        </div>
-
-        <table class="item-list">
-            <thead>
-                <tr>
-                    <th>ITEM</th>
-                    <th class="center-text">QTD</th>
-                    <th class="text-right">UNIT.</th>
-                    <th class="text-right">TOTAL</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% if is_single_item_receipt %}
-                <tr>
-                    <td>{{ item.name }}</td>
-                    <td class="center-text">{{ item_quantity }}</td>
-                    <td class="text-right">R$ {{ "%.2f"|format(item_price) }}</td>
-                    <td class="text-right">R$ {{ "%.2f"|format(item_subtotal) }}</td>
-                </tr>
-                {% else %}
-                {# Este bloco seria para um cupom de venda completa, se você ainda quisesse essa opção #}
-                {# Por enquanto, assumimos que is_single_item_receipt é sempre True para este cenário #}
-                <tr>
-                    <td colspan="4" class="text-center">Erro: Este cupom deve ser para um único item.</td>
-                </tr>
-                {% endif %}
-            </tbody>
-        </table>
-        <div class="dashed-line"></div>
-        <div class="total-line">
-            TOTAL DO ITEM: R$ {{ "%.2f"|format(item_subtotal) }}
-        </div>
-        <div class="total-line">
-            PAGAMENTO: {{ payment_method }}
-        </div>
-        <div class="dashed-line"></div>
-        <div class="footer">
-            <p class="info-line center-text">Obrigado pela preferência!</p>
-            <p class="info-line center-text">Volte sempre!</p>
-        </div>
+    <div class="center">
+        <strong>{{ company_name }}</strong><br>
+        <div class="dashed"></div>
+        CUPOM DE ITEM #{{ sale_id }}<br>
+        {{ timestamp.strftime('%d/%m/%Y %H:%M:%S') }}
+        <div class="dashed"></div>
+    </div>
+    <div>
+        PRODUTO: {{ item.name }}<br>
+        QTD: {{ item_quantity }} x R$ {{ "%.2f"|format(item_price) }}<br>
+        <span class="bold">SUBTOTAL: R$ {{ "%.2f"|format(item_subtotal) }}</span>
+    </div>
+    <div class="dashed"></div>
+    <div class="center">
+        Pagamento: {{ payment_method }}<br>
+        Obrigado e volte sempre!
     </div>
 </body>
 </html>

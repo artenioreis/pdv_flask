@@ -1,70 +1,93 @@
+{# templates/pdv.html #}
 {% extends "base.html" %}
 {% block title %}PDV{% endblock %}
+
+{% block head_extra %}
+<style>
+    /* Estilos para a lista de resultados da busca */
+    #searchResults {
+        position: absolute;
+        z-index: 1000;
+        width: calc(100% - 30px); /* Ajuste para a largura do container */
+        max-height: 200px;
+        overflow-y: auto;
+        background-color: white;
+        border: 1px solid #dee2e6;
+        border-top: none;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    #searchResults .list-group-item {
+        cursor: pointer;
+    }
+    #searchResults .list-group-item:hover {
+        background-color: #f8f9fa;
+    }
+    .cart-table-scroll {
+        max-height: 300px; /* Altura máxima para a tabela do carrinho com scroll */
+        overflow-y: auto;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<h1 class="mb-4">Ponto de Venda</h1>
+<h1 class="mb-4">Ponto de Venda (PDV)</h1>
 
 <div class="row">
-    <div class="col-md-7">
+    <div class="col-md-8">
         <div class="card mb-4">
-            <div class="card-header">
-                Adicionar Produto
-            </div>
+            <div class="card-header">Buscar Produtos</div>
             <div class="card-body">
-                <div class="form-group">
-                    <label for="productSearch">Buscar Produto (Nome ou Código de Barras):</label>
-                    <input type="text" class="form-control" id="productSearch" placeholder="Digite o nome ou código de barras">
-                    <div id="searchResults" class="list-group mt-2" style="max-height: 200px; overflow-y: auto;"></div>
+                <div class="mb-3 position-relative">
+                    <input type="text" class="form-control" id="productSearch" placeholder="Buscar por ID, nome ou código de barras...">
+                    <div id="searchResults" class="list-group">
+                        <!-- Resultados da busca serão inseridos aqui -->
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="card">
-            <div class="card-header">
-                Itens do Carrinho
-            </div>
+        <div class="card mb-4">
+            <div class="card-header">Carrinho de Compras</div>
             <div class="card-body">
-                <table class="table table-striped">
-                    <thead>
-                        <tr>
-                            <th>Produto</th>
-                            <th>Qtd</th>
-                            <th>Preço Unit.</th>
-                            <th>Subtotal</th>
-                            <th>Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody id="cartItems">
-                        <!-- Itens do carrinho serão adicionados aqui via JS -->
-                        <tr>
-                            <td colspan="5" class="text-center">Nenhum item no carrinho.</td>
-                        </tr>
-                    </tbody>
-                </table>
+                <div class="table-responsive cart-table-scroll">
+                    <table class="table table-striped table-sm">
+                        <thead>
+                            <tr>
+                                <th>Produto</th>
+                                <th style="width: 120px;">Qtd</th>
+                                <th>Preço Unit.</th>
+                                <th>Subtotal</th>
+                                <th style="width: 100px;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cartItems">
+                            <!-- Itens do carrinho serão inseridos aqui -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <h4>Total: <span id="cartTotal">R$ 0.00</span></h4>
+                    <div>
+                        <button class="btn btn-warning me-2" id="clearCartBtn">Limpar Carrinho</button>
+                        <button class="btn btn-success" id="checkoutBtn">Finalizar Venda</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="col-md-5">
+    <div class="col-md-4">
         <div class="card">
-            <div class="card-header">
-                Resumo da Venda
-            </div>
+            <div class="card-header">Método de Pagamento</div>
             <div class="card-body">
-                <div class="d-flex justify-content-between mb-2">
-                    <h5>Total:</h5>
-                    <h5 id="cartTotal">R$ 0.00</h5>
-                </div>
-                <hr>
-                <div class="form-group">
-                    <label for="paymentMethod">Método de Pagamento:</label>
-                    <select class="form-control" id="paymentMethod">
+                <div class="mb-3">
+                    <label for="paymentMethod" class="form-label">Selecione o método:</label>
+                    <select class="form-select" id="paymentMethod">
                         <option value="Dinheiro">Dinheiro</option>
                         <option value="Cartao">Cartão</option>
                         <option value="Pix">Pix</option>
                     </select>
                 </div>
-                <button class="btn btn-success btn-block mt-3" id="checkoutBtn">Finalizar Venda</button>
-                <button class="btn btn-danger btn-block mt-2" id="clearCartBtn">Limpar Carrinho</button>
             </div>
         </div>
     </div>
@@ -72,27 +95,24 @@
 
 <!-- Modal para exibir o cupom -->
 <div class="modal fade" id="receiptModal" tabindex="-1" aria-labelledby="receiptModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="receiptModalLabel">Cupom Não Fiscal</h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="receiptContent">
                 <!-- Conteúdo do cupom será carregado aqui -->
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
                 <button type="button" class="btn btn-primary" id="printReceiptBtn">Imprimir</button>
             </div>
         </div>
     </div>
 </div>
-
 {% endblock %}
 
-{% block scripts %}
+{% block scripts_extra %}
 <script src="{{ url_for('static', filename='js/pdv.js') }}"></script>
 {% endblock %}
