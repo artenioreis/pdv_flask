@@ -3,12 +3,12 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_user, logout_user, login_required, current_user
 from extensions import db
 from forms import LoginForm, ProductForm, UserForm, ProductImportForm
-from datetime import datetime, timedelta, date # Importa date e timedelta para os relatórios
+from datetime import datetime, timedelta, date
 import json
 from functools import wraps
 import pandas as pd
 import io
-from sqlalchemy import or_, func # Importa or_ e func explicitamente para clareza
+from sqlalchemy import or_, func
 
 main_bp = Blueprint('main', __name__)
 
@@ -21,10 +21,8 @@ def admin_required(f):
     Usa @wraps para preservar os metadados da função original, evitando erros de endpoint.
     """
     @wraps(f)
-    @login_required # Garante que o usuário esteja logado antes de verificar a role
+    @login_required
     def decorated_function(*args, **kwargs):
-        # Importa User aqui, dentro da função decorada, para garantir que models.py
-        # seja carregado apenas quando uma rota decorada for acessada e db já esteja inicializado.
         from models import User
         if not current_user.is_admin():
             flash('Você não tem permissão para acessar esta página.', 'danger')
@@ -47,11 +45,11 @@ def login():
 
     form = LoginForm()
     if form.validate_on_submit():
-        from models import User # Importa User aqui
+        from models import User
         user = User.query.filter_by(username=form.username.data).first()
         if user and user.check_password(form.password.data):
             login_user(user)
-            next_page = request.args.get('next') # Redireciona para a página que o usuário tentou acessar
+            next_page = request.args.get('next')
             flash(f'Bem-vindo, {user.username}!', 'success')
             return redirect(next_page or url_for('main.dashboard'))
         else:
@@ -82,11 +80,9 @@ def dashboard():
     if not current_user.is_admin():
         return redirect(url_for('main.pdv'))
 
-    # Importa os modelos aqui, pois são necessários para as queries do dashboard
     from models import Product, Sale
 
     total_products = Product.query.count()
-    # Filtra vendas do dia atual (UTC)
     today = datetime.utcnow().date()
     total_sales_today = Sale.query.filter(func.date(Sale.timestamp) == today).count()
     total_revenue_today = db.session.query(func.sum(Sale.total_amount)).filter(func.date(Sale.timestamp) == today).scalar() or 0
@@ -105,7 +101,7 @@ def products():
     Lista todos os produtos cadastrados no sistema.
     Apenas administradores podem acessar.
     """
-    from models import Product # Importa Product aqui
+    from models import Product
     products = Product.query.all()
     return render_template('products.html', products=products)
 
@@ -117,7 +113,7 @@ def add_product():
     Apenas administradores podem acessar.
     Processa o formulário de adição de produto.
     """
-    from models import Product # Importa Product aqui
+    from models import Product
     form = ProductForm()
     if form.validate_on_submit():
         product = Product(
@@ -141,11 +137,10 @@ def edit_product(product_id):
     Apenas administradores podem acessar.
     Preenche o formulário com os dados atuais do produto e processa as atualizações.
     """
-    from models import Product # Importa Product aqui
+    from models import Product
     product = Product.query.get_or_404(product_id)
-    form = ProductForm(obj=product) # Preenche o formulário com os dados do produto
+    form = ProductForm(obj=product)
     if form.validate_on_submit():
-        # Atualiza os campos do produto com os dados do formulário
         product.name = form.name.data
         product.description = form.description.data
         product.price = form.price.data
@@ -164,7 +159,7 @@ def delete_product(product_id):
     Apenas administradores podem acessar.
     Requer um método POST para segurança.
     """
-    from models import Product # Importa Product aqui
+    from models import Product
     product = Product.query.get_or_404(product_id)
     db.session.delete(product)
     db.session.commit()
@@ -180,7 +175,7 @@ def users():
     Lista todos os usuários do sistema.
     Apenas administradores podem acessar.
     """
-    from models import User # Importa User aqui
+    from models import User
     users = User.query.all()
     return render_template('users.html', users=users)
 
@@ -192,22 +187,20 @@ def add_user():
     Apenas administradores podem acessar.
     Inclui verificação para nome de usuário duplicado.
     """
-    from models import User # Importa User aqui
+    from models import User
     form = UserForm()
     if form.validate_on_submit():
-        # --- VERIFICAÇÃO ADICIONADA AQUI ---
         existing_user = User.query.filter_by(username=form.username.data).first()
         if existing_user:
             flash('Nome de usuário já existe. Por favor, escolha outro.', 'danger')
             return render_template('add_user.html', form=form, title='Adicionar Usuário')
-        # --- FIM DA VERIFICAÇÃO ---
 
         user = User(
             username=form.username.data,
             email=form.email.data,
             role=form.role.data
         )
-        user.set_password(form.password.data) # Define a senha com hash
+        user.set_password(form.password.data)
         db.session.add(user)
         db.session.commit()
         flash('Usuário adicionado com sucesso!', 'success')
@@ -231,20 +224,17 @@ def pdv_search_product():
     Endpoint para buscar produtos por ID, nome ou código de barras para o PDV.
     Implementa busca robusta com validação e priorização.
     """
-    from models import Product # Importa Product aqui para evitar importação circular
+    from models import Product
     query = request.args.get('query', '').strip()
 
     current_app.logger.debug(f"PDV Search: Recebida query '{query}'")
 
-    # 1. Validação da Query
     if not query:
         current_app.logger.debug("PDV Search: Query vazia, retornando resultados vazios.")
         return jsonify([])
 
-    # 2. Construção das Condições de Busca
     search_filters = []
 
-    # Tenta buscar por ID (prioridade alta se for um número exato)
     try:
         product_id = int(query)
         search_filters.append(Product.id == product_id)
@@ -253,18 +243,12 @@ def pdv_search_product():
         current_app.logger.debug(f"PDV Search: Query '{query}' não é um ID numérico.")
         pass
 
-    # Busca por Código de Barras (busca exata)
     search_filters.append(Product.barcode == query)
     current_app.logger.debug(f"PDV Search: Adicionada condição de busca por Código de Barras: '{query}'")
 
-    # Busca por Nome (parcial e insensível a maiúsculas/minúsculas)
     search_filters.append(Product.name.ilike(f'%{query}%'))
     current_app.logger.debug(f"PDV Search: Adicionada condição de busca por Nome (ilike): '%{query}%'")
 
-    # 3. Execução da Consulta
-    # Combina todas as condições com OR.
-
-    # Verifica se há filtros para evitar erro com or_() vazio
     if not search_filters:
         current_app.logger.warning("PDV Search: Nenhuma condição de busca válida foi gerada.")
         return jsonify([])
@@ -276,19 +260,16 @@ def pdv_search_product():
         current_app.logger.error(f"PDV Search: Erro ao executar query no banco de dados: {e}")
         return jsonify({'error': 'Erro interno na busca de produtos.'}), 500
 
-
-    # 4. Formatação e Retorno dos Resultados
     results = []
     for p in products:
         results.append({
             'id': p.id,
             'name': p.name,
-            'price': float(p.price), # Garante que o preço seja um float
+            'price': float(p.price),
             'stock': p.stock,
             'barcode': p.barcode
         })
 
-    # 5. Verificação de Validação (Opcional, para logs ou depuração)
     if not results and query:
         current_app.logger.info(f"PDV Search: Nenhum produto encontrado para a busca: '{query}'")
     elif results:
@@ -309,26 +290,37 @@ def pdv_checkout():
     cart_items = data.get('cart', [])
     payment_method = data.get('payment_method')
     total_amount = data.get('total_amount')
-    paid_amount = data.get('paid_amount') # Recebe o valor pago
-    change_amount = data.get('change_amount') # Recebe o troco
+    paid_amount = data.get('paid_amount')
+    change_amount = data.get('change_amount')
 
     if not cart_items or not payment_method or total_amount is None:
         return jsonify({'success': False, 'message': 'Dados da venda incompletos.'}), 400
 
+    # Garante que paid_amount e total_amount são floats para a comparação
+    try:
+        total_amount_float = float(total_amount)
+        # Se paid_amount for None ou string vazia, trata como 0.0
+        paid_amount_float = float(paid_amount) if paid_amount is not None and paid_amount != '' else 0.0
+        # change_amount pode ser None se não houver troco, ou 0.0
+        change_amount_float = float(change_amount) if change_amount is not None and change_amount != '' else 0.0
+    except (ValueError, TypeError) as e:
+        current_app.logger.error(f"Erro de conversão de valores de pagamento: {e}, total_amount={total_amount}, paid_amount={paid_amount}, change_amount={change_amount}")
+        return jsonify({'success': False, 'message': 'Valores de pagamento inválidos.'}), 400
+
     # Validação adicional para dinheiro: valor pago deve ser suficiente
-    if payment_method == 'Dinheiro' and (paid_amount is None or float(paid_amount) < float(total_amount)):
+    if payment_method == 'Dinheiro' and paid_amount_float < total_amount_float:
         return jsonify({'success': False, 'message': 'Valor pago insuficiente para pagamento em dinheiro.'}), 400
 
     try:
         new_sale = Sale(
-            total_amount=total_amount,
+            total_amount=total_amount_float,
             payment_method=payment_method,
             user_id=current_user.id,
-            paid_amount=paid_amount,   # Salva o valor pago
-            change_amount=change_amount # Salva o troco
+            paid_amount=paid_amount_float,
+            change_amount=change_amount_float
         )
         db.session.add(new_sale)
-        db.session.flush() # Garante que new_sale.id esteja disponível antes de adicionar SaleItems
+        db.session.flush()
 
         list_of_receipt_htmls = []
 
@@ -356,14 +348,13 @@ def pdv_checkout():
             )
             db.session.add(sale_item)
 
-            # Gera um cupom para CADA UNIDADE vendida
             for i in range(quantity_sold):
                 receipt_html = render_template('receipt.html',
                                                sale_id=new_sale.id,
                                                item=item_data,
-                                               item_quantity=1, # Quantidade no cupom individual é 1
+                                               item_quantity=1,
                                                item_price=price_at_sale,
-                                               item_subtotal=price_at_sale, # Subtotal no cupom individual é o preço unitário
+                                               item_subtotal=price_at_sale,
                                                payment_method=payment_method,
                                                operator_username=current_user.username,
                                                timestamp=datetime.utcnow(),
@@ -373,19 +364,17 @@ def pdv_checkout():
                                                company_cnpj=current_app.config.get('COMPANY_CNPJ', 'XX.XXX.XXX/XXXX-XX'),
                                                logo_path=current_app.config.get('LOGO_PATH', url_for('static', filename='img/logo.png')),
                                                is_single_item_receipt=True,
-                                               # Adiciona valor pago e troco ao cupom (se for o último item ou se quiser em todos)
-                                               # Para simplificar, vamos passar para todos, mas o JS pode decidir exibir apenas no primeiro
-                                               paid_amount=paid_amount,
-                                               change_amount=change_amount
+                                               paid_amount=paid_amount_float,
+                                               change_amount=change_amount_float
                                                )
                 list_of_receipt_htmls.append(receipt_html)
 
-        db.session.commit() # Confirma todas as alterações no banco de dados
+        db.session.commit()
 
         return jsonify({'success': True, 'message': 'Venda realizada com sucesso!', 'receipt_htmls': list_of_receipt_htmls}), 200
 
     except Exception as e:
-        db.session.rollback() # Em caso de erro, desfaz todas as operações no banco
+        db.session.rollback()
         current_app.logger.error(f"Erro ao finalizar venda: {e}")
         return jsonify({'success': False, 'message': f'Erro interno ao processar a venda: {str(e)}'}), 500
 
@@ -428,7 +417,7 @@ def cash_flow_report():
     total_sales = sum(s.total_amount for s in sales)
 
     report_data = {
-        'cash_sales': float(cash_sales), # Garante que seja float para JSON
+        'cash_sales': float(cash_sales),
         'card_sales': float(card_sales),
         'pix_sales': float(pix_sales),
         'total_sales': float(total_sales),
@@ -458,7 +447,7 @@ def stock_report():
         'id': p.id,
         'name': p.name,
         'stock': p.stock,
-        'price': float(p.price), # Garante que seja float para JSON
+        'price': float(p.price),
         'description': p.description
     } for p in products]
     return jsonify(report_data)
@@ -473,7 +462,6 @@ def top_products_report():
     """
     from models import db, SaleItem, Product
 
-    # Consulta para somar a quantidade de cada produto vendido
     top_products = db.session.query(
         Product.name,
         func.sum(SaleItem.quantity).label('total_quantity')
@@ -492,18 +480,16 @@ def daily_sales_report():
     from datetime import timedelta, date
 
     today = date.utcnow()
-    # Gera uma lista das últimas 7 datas
-    dates = [(today - timedelta(days=i)) for i in range(6, -1, -1)] # Do mais antigo ao mais recente
+    dates = [(today - timedelta(days=i)) for i in range(6, -1, -1)]
 
     daily_revenue = []
     for d in dates:
-        # Soma o total_amount para todas as vendas naquele dia
         revenue = db.session.query(func.sum(Sale.total_amount)).filter(
             func.date(Sale.timestamp) == d
         ).scalar() or 0.0
         daily_revenue.append({
-            'date': d.strftime('%d/%m'), # Formata a data para exibição
-            'revenue': float(revenue) # Garante que seja um float
+            'date': d.strftime('%d/%m'),
+            'revenue': float(revenue)
         })
 
     return jsonify(daily_revenue)
@@ -521,7 +507,7 @@ def import_products():
     from models import Product
     form = ProductImportForm()
 
-    if form.validate_on_submit(): # Processa o upload de arquivo
+    if form.validate_on_submit():
         file = form.file.data
         filename = file.filename
         file_extension = filename.rsplit('.', 1)[1].lower()
@@ -533,7 +519,7 @@ def import_products():
             if file_extension == 'csv':
                 try:
                     df = pd.read_csv(io.BytesIO(file_content), encoding='utf-8')
-                except UnicodeDecodeError: # Tenta outra codificação se a primeira falhar
+                except UnicodeDecodeError:
                     df = pd.read_csv(io.BytesIO(file_content), encoding='latin1')
                 except Exception as e:
                     raise ValueError(f"Erro ao ler CSV: {e}")
@@ -543,10 +529,8 @@ def import_products():
                 flash('Formato de arquivo não suportado.', 'danger')
                 return redirect(url_for('main.import_products'))
 
-            # Normaliza os nomes das colunas para minúsculas
             df.columns = df.columns.str.lower()
 
-            # Mapeamento de nomes de colunas esperados para nomes de modelo
             column_mapping = {
                 'nome': 'name',
                 'codigo_barras': 'barcode',
@@ -554,10 +538,8 @@ def import_products():
                 'estoque_atual': 'stock',
             }
 
-            # Renomeia as colunas do DataFrame
             df.rename(columns=column_mapping, inplace=True)
 
-            # Verifica se todas as colunas necessárias estão presentes após o renomeio
             required_columns = ['name', 'barcode', 'price', 'stock']
             if not all(col in df.columns for col in required_columns):
                 missing_cols = [col for col in required_columns if col not in df.columns]
@@ -568,12 +550,10 @@ def import_products():
             updated_count = 0
             errors = []
 
-            # Itera sobre as linhas do DataFrame para processar os produtos
             for index, row in df.iterrows():
                 name = str(row.get('name', '')).strip()
                 barcode = str(row.get('barcode', '')).strip()
 
-                # Validação e conversão de preço
                 try:
                     price = float(str(row.get('price', 0)).replace(',', '.'))
                     if price < 0: raise ValueError("Preço negativo")
@@ -581,7 +561,6 @@ def import_products():
                     errors.append(f"Linha {index+2}: Preço inválido para '{name}' ('{barcode}'): '{row.get('price', 'N/A')}'.")
                     continue
 
-                # Validação e conversão de estoque
                 try:
                     stock = int(float(str(row.get('stock', 0)).replace(',', '.')))
                     if stock < 0: raise ValueError("Estoque negativo")
@@ -589,7 +568,6 @@ def import_products():
                     errors.append(f"Linha {index+2}: Estoque inválido para '{name}' ('{barcode}'): '{row.get('stock', 'N/A')}'.")
                     continue
 
-                # Validação de campos obrigatórios
                 if not name:
                     errors.append(f"Linha {index+2}: Nome do produto ausente para código de barras '{barcode}'.")
                     continue
@@ -597,18 +575,15 @@ def import_products():
                     errors.append(f"Linha {index+2}: Código de barras ausente para produto '{name}'.")
                     continue
 
-                # Tenta encontrar um produto existente pelo código de barras
                 existing_product = Product.query.filter_by(barcode=barcode).first()
 
                 if existing_product:
-                    # Atualiza o produto existente
                     existing_product.name = name
                     existing_product.price = price
                     existing_product.stock = stock
                     db.session.add(existing_product)
                     updated_count += 1
                 else:
-                    # Cria um novo produto
                     new_product = Product(
                         name=name,
                         barcode=barcode,
@@ -618,7 +593,6 @@ def import_products():
                     db.session.add(new_product)
                     imported_count += 1
 
-            # Confirma as alterações no banco de dados e exibe mensagens flash
             db.session.commit()
             if imported_count > 0:
                 flash(f'{imported_count} produtos novos importados com sucesso!', 'success')
@@ -632,12 +606,12 @@ def import_products():
             return redirect(url_for('main.products'))
 
         except Exception as e:
-            db.session.rollback() # Desfaz as operações em caso de erro
+            db.session.rollback()
             current_app.logger.error(f"Erro ao processar arquivo de importação: {e}")
             flash(f'Erro ao processar arquivo: {str(e)}', 'danger')
             return redirect(url_for('main.import_products'))
 
-    elif request.method == 'POST' and request.form.get('products_json'): # Processa a importação da tabela manual
+    elif request.method == 'POST' and request.form.get('products_json'):
         products_json = request.form.get('products_json')
         if not products_json:
             flash('Nenhum dado de produto foi enviado da tabela.', 'danger')
@@ -659,7 +633,6 @@ def import_products():
             price = item_data.get('price')
             stock = item_data.get('stock')
 
-            # Validação dos dados da tabela manual
             if not name:
                 errors.append(f"Produto com nome ausente para código de barras '{barcode}'.")
                 continue

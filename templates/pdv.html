@@ -26,6 +26,12 @@
         max-height: 300px; /* Altura máxima para a tabela do carrinho com scroll */
         overflow-y: auto;
     }
+    /* Estilo para o cabeçalho do card do carrinho para posicionar o botão */
+    .cart-header-with-button {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
 </style>
 {% endblock %}
 
@@ -47,7 +53,10 @@
         </div>
 
         <div class="card mb-4">
-            <div class="card-header">Carrinho de Compras</div>
+            <div class="card-header cart-header-with-button"> {# Adiciona a classe para layout flex #}
+                <h5>Carrinho de Compras</h5>
+                <button class="btn btn-warning btn-sm" id="clearCartBtn">Limpar Carrinho</button> {# Botão movido para o cabeçalho #}
+            </div>
             <div class="card-body">
                 <div class="table-responsive cart-table-scroll">
                     <table class="table table-striped table-sm">
@@ -65,12 +74,9 @@
                         </tbody>
                     </table>
                 </div>
-                <div class="d-flex justify-content-between align-items-center mt-3">
+                <div class="d-flex justify-content-end align-items-center mt-3"> {# Ajustado para justificar apenas à direita #}
                     <h4>Total: <span id="cartTotal">R$ 0.00</span></h4>
-                    <div>
-                        <button class="btn btn-warning me-2" id="clearCartBtn">Limpar Carrinho</button>
-                        <button class="btn btn-success" id="checkoutBtn">Finalizar Venda</button>
-                    </div>
+                    <button class="btn btn-success ms-3" id="checkoutBtn">Finalizar Venda</button> {# Adicionado margem à esquerda #}
                 </div>
             </div>
         </div>
@@ -78,15 +84,25 @@
 
     <div class="col-md-4">
         <div class="card">
-            <div class="card-header">Método de Pagamento</div>
+            <div class="card-header">Pagamento e Troco</div>
             <div class="card-body">
                 <div class="mb-3">
-                    <label for="paymentMethod" class="form-label">Selecione o método:</label>
+                    <label for="paymentMethod" class="form-label">Método de Pagamento:</label>
                     <select class="form-select" id="paymentMethod">
                         <option value="Dinheiro">Dinheiro</option>
                         <option value="Cartao">Cartão</option>
                         <option value="Pix">Pix</option>
                     </select>
+                </div>
+
+                <div class="mb-3" id="paidAmountGroup"> {# Grupo para Valor Pago, visível apenas para Dinheiro #}
+                    <label for="paidAmount" class="form-label">Valor Pago (R$):</label>
+                    <input type="number" step="0.01" class="form-control" id="paidAmount" value="0.00" min="0">
+                </div>
+
+                <div class="mb-3">
+                    <label for="changeAmount" class="form-label">Troco (R$):</label>
+                    <input type="text" class="form-control" id="changeAmount" value="0.00" readonly>
                 </div>
             </div>
         </div>
