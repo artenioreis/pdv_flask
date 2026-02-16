@@ -10,8 +10,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const paidAmountInput = document.getElementById('paidAmount');
     const paidAmountGroup = document.getElementById('paidAmountGroup');
     const changeAmountInput = document.getElementById('changeAmount');
-    const receiptModalElement = document.getElementById('receiptModal'); // Referência ao elemento do modal
-    const receiptModal = new bootstrap.Modal(receiptModalElement); // Instância do modal
+    const receiptModalElement = document.getElementById('receiptModal');
+    const receiptModal = new bootstrap.Modal(receiptModalElement);
     const receiptContent = document.getElementById('receiptContent');
     const printReceiptBtn = document.getElementById('printReceiptBtn');
 
@@ -254,12 +254,16 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.success) {
                 flashMessage(data.message, 'success');
+
+                // Limpa o carrinho e atualiza o display imediatamente
                 cart = [];
                 updateCartDisplay();
 
-                // CORREÇÃO: Exibe todos os cupons individuais no modal
-                receiptContent.innerHTML = data.receipt_htmls.join('<hr style="border-top: 2px dashed #ccc; margin: 20px 0;">');
-                receiptModal.show();
+                // Preenche o modal com os cupons e o exibe
+                if (data.receipt_htmls && data.receipt_htmls.length > 0) {
+                    receiptContent.innerHTML = data.receipt_htmls.join('<hr style="border-top: 2px dashed #ccc; margin: 20px 0;">');
+                    receiptModal.show(); // Exibe o modal de visualização
+                }
             } else {
                 flashMessage(data.message, 'danger');
             }
@@ -280,21 +284,21 @@ document.addEventListener('DOMContentLoaded', function() {
         updatePaymentDetails(parseCurrency(cartTotalSpan.textContent));
     });
 
-    // Função para imprimir o conteúdo do modal
+    // Função para imprimir o conteúdo do modal (acionada pelo botão no modal)
     printReceiptBtn.addEventListener('click', function() {
         const printWindow = window.open('', '_blank');
-        printWindow.document.write('<html><head><title>Cupons</title>'); // Título plural
+        printWindow.document.write('<html><head><title>Cupons</title>');
         printWindow.document.write('<style>');
         printWindow.document.write('body { font-family: "Courier New", Courier, monospace; font-size: 14px; margin: 0; padding: 10px; font-weight: bold; }');
-        printWindow.document.write('hr { border-top: 2px dashed #000; margin: 20px 0; page-break-after: always; }'); // CORREÇÃO: Adicionado page-break-after
+        printWindow.document.write('hr { border-top: 2px dashed #000; margin: 20px 0; page-break-after: always; }');
         printWindow.document.write('</style>');
         printWindow.document.write('</head><body>');
-        printWindow.document.write(receiptContent.innerHTML);
+        printWindow.document.write(receiptContent.innerHTML); // Conteúdo do modal
         printWindow.document.write('</body></html>');
         printWindow.document.close();
         printWindow.focus();
         printWindow.print();
-        // printWindow.close(); // Opcional: fechar a janela após a impressão
+        // Não fechar o modal aqui, o usuário pode querer fechar manualmente ou imprimir novamente
     });
 
     // Listeners para o modal do cupom para forçar redesenho
