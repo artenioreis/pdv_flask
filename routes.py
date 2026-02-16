@@ -2,13 +2,16 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from extensions import db
-from forms import LoginForm, ProductForm, UserForm, ProductImportForm # Importe UserForm
+from forms import LoginForm, ProductForm, UserForm, ProductImportForm
 from datetime import datetime, timedelta, date
 import json
 from functools import wraps
 import pandas as pd
 import io
 from sqlalchemy import or_, func
+
+# Importar a classe User aqui
+from models import User, Product, Sale, SaleItem # Importe todos os modelos que são usados globalmente ou em várias funções
 
 main_bp = Blueprint('main', __name__)
 
@@ -23,7 +26,6 @@ def admin_required(f):
     @wraps(f)
     @login_required
     def decorated_function(*args, **kwargs):
-        from models import User
         if not current_user.is_admin():
             flash('Você não tem permissão para acessar esta página.', 'danger')
             return redirect(url_for('main.dashboard'))
@@ -32,7 +34,7 @@ def admin_required(f):
 
 # --- Rotas de Autenticação ---
 
-@main_bp.route('/')
+@main_bp.route('/', methods=['GET', 'POST'])
 @main_bp.route('/login', methods=['GET', 'POST'])
 def login():
     """
@@ -45,7 +47,6 @@ def login():
 
     form = LoginForm()
     if form.validate_on_submit():
-        from models import User
         user = User.query.filter_by(username=form.username.data).first()
         if user and user.check_password(form.password.data):
             login_user(user)
@@ -80,8 +81,6 @@ def dashboard():
     if not current_user.is_admin():
         return redirect(url_for('main.pdv'))
 
-    from models import Product, Sale
-
     total_products = Product.query.count()
     today = datetime.utcnow().date()
     total_sales_today = Sale.query.filter(func.date(Sale.timestamp) == today).count()
@@ -101,7 +100,6 @@ def products():
     Lista todos os produtos cadastrados no sistema.
     Apenas administradores podem acessar.
     """
-    from models import Product
     products = Product.query.all()
     return render_template('products.html', products=products)
 
@@ -114,7 +112,6 @@ def add_product():
     """
     form = ProductForm()
     if form.validate_on_submit():
-        from models import Product
         product = Product(name=form.name.data,
                           description=form.description.data,
                           price=form.price.data,
@@ -133,7 +130,6 @@ def edit_product(product_id):
     Edita um produto existente.
     Apenas administradores podem acessar.
     """
-    from models import Product
     product = Product.query.get_or_404(product_id)
     form = ProductForm(obj=product) # Preenche o formulário com os dados do produto
 
@@ -151,7 +147,6 @@ def delete_product(product_id):
     Exclui um produto.
     Apenas administradores podem acessar.
     """
-    from models import Product, SaleItem
     product = Product.query.get_or_404(product_id)
 
     # Verifica se o produto está em alguma venda
@@ -173,7 +168,6 @@ def users():
     Lista todos os usuários cadastrados no sistema.
     Apenas administradores podem acessar.
     """
-    from models import User
     users = User.query.all()
     return render_template('users.html', users=users)
 
@@ -186,7 +180,6 @@ def add_user():
     """
     form = UserForm()
     if form.validate_on_submit():
-        from models import User
         user = User(username=form.username.data, email=form.email.data, role=form.role.data)
         user.set_password(form.password.data) # Define a senha com hash
         db.session.add(user)
@@ -202,7 +195,6 @@ def edit_user(user_id):
     Edita um usuário existente.
     Apenas administradores podem acessar.
     """
-    from models import User
     user = User.query.get_or_404(user_id)
     form = UserForm(obj=user) # Preenche o formulário com os dados do usuário
 
@@ -241,7 +233,6 @@ def delete_user(user_id):
     Exclui um usuário.
     Apenas administradores podem acessar.
     """
-    from models import User, Sale
     user = User.query.get_or_404(user_id)
 
     # Não permitir que o próprio usuário logado se exclua
@@ -285,7 +276,6 @@ def search_product():
     Endpoint para buscar produtos por ID, nome ou código de barras.
     Retorna uma lista de produtos em formato JSON.
     """
-    from models import Product
     query = request.args.get('query', '').strip()
     current_app.logger.debug(f"PDV Search: Recebida query '{query}'")
 
@@ -332,8 +322,8 @@ def search_product():
 def checkout():
     """
     Finaliza uma venda, registrando-a no banco de dados e atualizando o estoque.
+    Gera um cupom individual para cada item vendido.
     """
-    from models import Product, Sale, SaleItem
     data = request.get_json()
     cart_items = data.get('cart')
     payment_method = data.get('payment_method')
@@ -348,6 +338,7 @@ def checkout():
         # Cria a nova venda
         new_sale = Sale(
             user_id=current_user.id,
+            timestamp=datetime.utcnow(), # Garante que o timestamp é definido aqui
             total_amount=total_amount,
             payment_method=payment_method,
             paid_amount=paid_amount,
@@ -380,54 +371,47 @@ def checkout():
             )
             db.session.add(sale_item)
 
-        db.session.commit() # Confirma todas as alterações (venda, itens, estoque)
+            # --- Geração do HTML do cupom INDIVIDUAL para CADA ITEM ---
+            # Este loop será executado para cada item, gerando um HTML separado
+            for i in range(quantity): # Gera um cupom para cada unidade do item
+                receipt_html = f"""
+                    <div style="text-align: center;">
+                        <p><strong>CUPOM NÃO FISCAL</strong></p>
+                        <p><strong>{current_app.config.get('COMPANY_NAME', 'PDV Flask')}</strong></p>
+                        <p><strong>CNPJ: {current_app.config.get('COMPANY_CNPJ', 'XX.XXX.XXX/XXXX-XX')}</strong></p>
+                        <p><strong>Endereço: {current_app.config.get('COMPANY_ADDRESS', 'Rua Exemplo, 123 - Cidade/UF')}</strong></p>
+                        <hr>
+                        <p><strong>Data: {new_sale.timestamp.strftime('%d/%m/%Y %H:%M:%S')}</strong></p>
+                        <p><strong>Operador: {current_user.username}</strong></p>
+                        <hr>
+                        <p><strong>ITEM VENDIDO:</strong></p>
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align: left;">Produto</th>
+                                    <th style="text-align: right;">Preço Unit.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td style="text-align: left;">{item_data['name']}</td>
+                                    <td style="text-align: right;">R$ {item_data['price']:.2f}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <hr>
+                        <p style="text-align: right;"><strong>TOTAL DO ITEM: R$ {item_data['price']:.2f}</strong></p>
+                        <p style="text-align: right;"><strong>VENDA TOTAL: R$ {new_sale.total_amount:.2f}</strong></p>
+                        <p style="text-align: right;"><strong>PAGAMENTO: {new_sale.payment_method}</strong></p>
+                        <p style="text-align: right;"><strong>VALOR PAGO: R$ {new_sale.paid_amount:.2f}</strong></p>
+                        <p style="text-align: right;"><strong>TROCO: R$ {new_sale.change_amount:.2f}</strong></p>
+                        <hr>
+                        <p><strong>Obrigado e volte sempre!</strong></p>
+                    </div>
+                """
+                list_of_receipt_htmls.append(receipt_html)
 
-        # Geração do HTML do cupom (pode ser um loop se houver múltiplos cupons por venda)
-        # Para simplificar, um único cupom por venda
-        receipt_html = f"""
-            <div style="text-align: center;">
-                <p><strong>CUPOM NÃO FISCAL</strong></p>
-                <p><strong>{current_app.config.get('COMPANY_NAME', 'PDV Flask')}</strong></p>
-                <p><strong>CNPJ: {current_app.config.get('COMPANY_CNPJ', 'XX.XXX.XXX/XXXX-XX')}</strong></p>
-                <p><strong>Endereço: {current_app.config.get('COMPANY_ADDRESS', 'Rua Exemplo, 123 - Cidade/UF')}</strong></p>
-                <hr>
-                <p><strong>Data: {new_sale.timestamp.strftime('%d/%m/%Y %H:%M:%S')}</strong></p>
-                <p><strong>Operador: {current_user.username}</strong></p>
-                <hr>
-                <p><strong>ITENS DA VENDA:</strong></p>
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr>
-                            <th style="text-align: left;">Item</th>
-                            <th style="text-align: center;">Qtd</th>
-                            <th style="text-align: right;">Unit.</th>
-                            <th style="text-align: right;">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        """
-        for item_data in cart_items:
-            receipt_html += f"""
-                        <tr>
-                            <td style="text-align: left;">{item_data['name']}</td>
-                            <td style="text-align: center;">{item_data['quantity']}</td>
-                            <td style="text-align: right;">R$ {item_data['price']:.2f}</td>
-                            <td style="text-align: right;">R$ {(item_data['price'] * item_data['quantity']):.2f}</td>
-                        </tr>
-            """
-        receipt_html += f"""
-                    </tbody>
-                </table>
-                <hr>
-                <p style="text-align: right;"><strong>TOTAL: R$ {new_sale.total_amount:.2f}</strong></p>
-                <p style="text-align: right;"><strong>PAGAMENTO: {new_sale.payment_method}</strong></p>
-                <p style="text-align: right;"><strong>VALOR PAGO: R$ {new_sale.paid_amount:.2f}</strong></p>
-                <p style="text-align: right;"><strong>TROCO: R$ {new_sale.change_amount:.2f}</strong></p>
-                <hr>
-                <p><strong>Obrigado e volte sempre!</strong></p>
-            </div>
-        """
-        list_of_receipt_htmls.append(receipt_html)
+        db.session.commit() # Confirma todas as alterações (venda, itens, estoque)
 
         return jsonify({'success': True, 'message': 'Venda finalizada com sucesso!', 'receipt_htmls': list_of_receipt_htmls}), 200
 
@@ -454,7 +438,6 @@ def cash_flow_report():
     Apenas administradores podem acessar.
     Filtra por data e calcula totais por método de pagamento.
     """
-    from models import Sale, User
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
 
@@ -499,7 +482,6 @@ def stock_report():
     Apenas administradores podem acessar.
     Lista todos os produtos com suas informações de estoque.
     """
-    from models import Product
     products = Product.query.order_by(Product.name).all()
     report_data = [{
         'id': p.id,
@@ -518,8 +500,6 @@ def top_products_report():
     """
     Retorna os 5 produtos mais vendidos por quantidade para o gráfico de barras.
     """
-    from models import db, SaleItem, Product
-
     top_products = db.session.query(
         Product.name,
         func.sum(SaleItem.quantity).label('total_quantity')
@@ -534,7 +514,6 @@ def daily_sales_report():
     """
     Retorna a receita total por dia para os últimos 7 dias para o gráfico de linha.
     """
-    from models import db, Sale
     from datetime import timedelta, date, datetime
 
     today = datetime.utcnow().date()
@@ -562,7 +541,6 @@ def import_products():
     ou via tabela manual.
     Apenas administradores podem acessar.
     """
-    from models import Product
     form = ProductImportForm()
 
     if form.validate_on_submit():
@@ -657,7 +635,7 @@ def import_products():
             if updated_count > 0:
                 flash(f'{updated_count} produtos existentes atualizados com sucesso!', 'info')
             if errors:
-                flash(f'Alguns produtos tiveram erros e não foram importados/atualizados: {len(errors)} erros. Detalhes: {"; ".join(errors[:5])}{"..." if len(errors) > 5 else ""}', 'warning')
+                flash(f'Alguns produtos tiveram erros e não foram importados/atualizados: {"; ".join(errors[:5])}{"..." if len(errors) > 5 else ""}', 'warning')
             if imported_count == 0 and updated_count == 0 and not errors:
                 flash('Nenhum produto foi importado ou atualizado a partir do arquivo.', 'info')
 

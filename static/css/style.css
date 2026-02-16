@@ -231,9 +231,16 @@ h1, h2, h3, h4, h5, h6 {
 
 #receiptContent {
     font-family: 'Courier New', Courier, monospace; /* Fonte monoespaçada para cupom */
-    font-size: 0.9em;
-    line-height: 1.4;
+    font-size: 1.0em; /* CORREÇÃO: Aumentado para 1.0em */
+    line-height: 1.5; /* CORREÇÃO: Aumentado para 1.5 para melhor espaçamento */
     color: #333;
+    font-weight: bold; /* CORREÇÃO: Adicionado negrito */
+}
+
+/* Estilo para a linha divisória entre cupons no modal */
+#receiptContent hr {
+    border-top: 2px dashed #ccc; /* CORREÇÃO: Espessura da linha */
+    margin: 20px 0; /* CORREÇÃO: Maior espaçamento entre cupons */
 }
 
 /* Botões Customizados */

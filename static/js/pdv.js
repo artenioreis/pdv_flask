@@ -8,9 +8,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const checkoutBtn = document.getElementById('checkoutBtn');
     const paymentMethodSelect = document.getElementById('paymentMethod');
     const paidAmountInput = document.getElementById('paidAmount');
-    const paidAmountGroup = document.getElementById('paidAmountGroup'); // O grupo para mostrar/esconder
+    const paidAmountGroup = document.getElementById('paidAmountGroup');
     const changeAmountInput = document.getElementById('changeAmount');
-    const receiptModal = new bootstrap.Modal(document.getElementById('receiptModal'));
+    const receiptModalElement = document.getElementById('receiptModal'); // Referência ao elemento do modal
+    const receiptModal = new bootstrap.Modal(receiptModalElement); // Instância do modal
     const receiptContent = document.getElementById('receiptContent');
     const printReceiptBtn = document.getElementById('printReceiptBtn');
 
@@ -111,9 +112,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const change = paidAmount - total;
-        changeAmountInput.value = change.toFixed(2); // Formata para 2 casas decimais
+        changeAmountInput.value = change.toFixed(2);
 
-        // Adiciona classe para indicar troco negativo (a pagar) ou positivo (a devolver)
         if (change < 0) {
             changeAmountInput.classList.remove('text-success');
             changeAmountInput.classList.add('text-danger');
@@ -123,9 +123,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- Mensagens Flash (para substituir flash do Flask no frontend) ---
+    // --- Mensagens Flash ---
     function flashMessage(message, category) {
-        const alertContainer = document.querySelector('.container-fluid.py-4'); // Ou onde você preferir
+        const alertContainer = document.querySelector('.container-fluid.py-4'); // Ou o container onde você quer as mensagens
+        if (!alertContainer) return; // Garante que o container existe
+
         const alertDiv = document.createElement('div');
         alertDiv.className = `alert alert-${category} alert-dismissible fade show mt-3`;
         alertDiv.setAttribute('role', 'alert');
@@ -133,8 +135,8 @@ document.addEventListener('DOMContentLoaded', function() {
             ${message}
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         `;
-        alertContainer.prepend(alertDiv); // Adiciona no topo do container
-        setTimeout(() => alertDiv.remove(), 5000); // Remove após 5 segundos
+        alertContainer.prepend(alertDiv);
+        setTimeout(() => alertDiv.remove(), 5000);
     }
 
     // --- Event Listeners ---
@@ -222,16 +224,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const totalAmount = parseCurrency(cartTotalSpan.textContent);
         const paymentMethod = paymentMethodSelect.value;
-        let paidAmount = parseFloat(paidAmountInput.value) || 0; // Garante que seja um número, 0 se vazio
-        const changeAmount = parseFloat(changeAmountInput.value) || 0; // Garante que seja um número, 0 se vazio
+        let paidAmount = parseFloat(paidAmountInput.value) || 0;
+        const changeAmount = parseFloat(changeAmountInput.value) || 0;
 
-        // Validação adicional no frontend para pagamento em dinheiro
         if (paymentMethod === 'Dinheiro' && paidAmount < totalAmount) {
             flashMessage('Valor pago insuficiente para pagamento em dinheiro.', 'danger');
             return;
         }
 
-        // Se não for dinheiro, o valor pago é o total da venda
+        // Para outros métodos de pagamento, o valor pago é o total da venda
         if (paymentMethod !== 'Dinheiro') {
             paidAmount = totalAmount;
         }
@@ -245,19 +246,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 cart: cart,
                 payment_method: paymentMethod,
                 total_amount: totalAmount,
-                paid_amount: paidAmount, // Envia o valor pago
-                change_amount: changeAmount // Envia o troco
+                paid_amount: paidAmount,
+                change_amount: changeAmount
             })
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
                 flashMessage(data.message, 'success');
-                cart = []; // Limpa o carrinho após a venda
+                cart = [];
                 updateCartDisplay();
 
-                // Exibe o(s) cupom(ns) no modal
-                receiptContent.innerHTML = data.receipt_htmls.join('<hr style="border-top: 1px dashed #ccc;">'); // Junta múltiplos cupons
+                // CORREÇÃO: Exibe todos os cupons individuais no modal
+                receiptContent.innerHTML = data.receipt_htmls.join('<hr style="border-top: 2px dashed #ccc; margin: 20px 0;">');
                 receiptModal.show();
             } else {
                 flashMessage(data.message, 'danger');
@@ -282,10 +283,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Função para imprimir o conteúdo do modal
     printReceiptBtn.addEventListener('click', function() {
         const printWindow = window.open('', '_blank');
-        printWindow.document.write('<html><head><title>Cupom</title>');
+        printWindow.document.write('<html><head><title>Cupons</title>'); // Título plural
         printWindow.document.write('<style>');
-        printWindow.document.write('body { font-family: "Courier New", Courier, monospace; font-size: 12px; margin: 0; padding: 10px; }');
-        printWindow.document.write('hr { border-top: 1px dashed #ccc; margin: 10px 0; }');
+        printWindow.document.write('body { font-family: "Courier New", Courier, monospace; font-size: 14px; margin: 0; padding: 10px; font-weight: bold; }');
+        printWindow.document.write('hr { border-top: 2px dashed #000; margin: 20px 0; page-break-after: always; }'); // CORREÇÃO: Adicionado page-break-after
         printWindow.document.write('</style>');
         printWindow.document.write('</head><body>');
         printWindow.document.write(receiptContent.innerHTML);
@@ -294,6 +295,11 @@ document.addEventListener('DOMContentLoaded', function() {
         printWindow.focus();
         printWindow.print();
         // printWindow.close(); // Opcional: fechar a janela após a impressão
+    });
+
+    // Listeners para o modal do cupom para forçar redesenho
+    receiptModalElement.addEventListener('hidden.bs.modal', function () {
+        window.dispatchEvent(new Event('resize'));
     });
 
     // Inicializa o display do carrinho e detalhes de pagamento
