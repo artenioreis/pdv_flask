@@ -1,69 +1,58 @@
 /* static/css/style.css */
 
-/*
-    Variáveis CSS para Cores da Empresa e Estilos Gerais
-    Ajuste estes valores para as cores da sua logo e identidade visual.
-*/
 :root {
-    --primary-color: #007bff; /* Azul vibrante - Exemplo para botões, destaques, etc. */
-    --secondary-color: #28a745; /* Verde - Exemplo para botões de sucesso, cards, etc. */
-    --info-color: #17a2b8; /* Azul claro - Exemplo para cards de informação */
-    --warning-color: #ffc107; /* Amarelo - Exemplo para botões de alerta */
-    --danger-color: #dc3545; /* Vermelho - Exemplo para botões de remover/erro */
-
-    --background-light: #f8f9fa; /* Cinza claro - Fundo geral da aplicação */
-    --text-dark: #343a40; /* Cinza escuro - Cor principal do texto */
-    --text-light: #ffffff; /* Branco - Cor do texto em fundos escuros */
-
-    --sidebar-bg: #343a40; /* Fundo da sidebar - Geralmente escuro */
-    --sidebar-link-hover: #0056b3; /* Cor do link da sidebar ao passar o mouse */
-    --sidebar-header-bg: var(--primary-color); /* Fundo do cabeçalho da sidebar */
-
-    --navbar-bg: #ffffff; /* Fundo da barra de navegação superior */
-    --navbar-border-bottom: #e0e0e0; /* Borda inferior da navbar */
-
-    --card-bg: #ffffff; /* Fundo dos cards */
-    --card-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075); /* Sombra padrão para cards */
-
-    --login-bg-gradient-start: #007bff; /* Cor inicial do gradiente de fundo da tela de login */
-    --login-bg-gradient-end: #0056b3;   /* Cor final do gradiente de fundo da tela de login */
-    --login-card-bg: rgba(255, 255, 255, 0.95); /* Fundo do card de login (semi-transparente) */
-    --login-card-shadow: 0 10px 25px rgba(0, 0, 0, 0.2); /* Sombra do card de login */
+    --primary-color: #007bff;
+    --secondary-color: #28a745;
+    --info-color: #17a2b8;
+    --warning-color: #ffc107;
+    --danger-color: #dc3545;
+    --background-light: #f8f9fa;
+    --text-dark: #343a40;
+    --text-light: #ffffff;
+    --sidebar-bg: #343a40;
+    --sidebar-link-hover: #0056b3;
+    --sidebar-header-bg: var(--primary-color);
+    --navbar-bg: #ffffff;
+    --navbar-border-bottom: #e0e0e0;
+    --card-bg: #ffffff;
+    --card-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    --login-bg-gradient-start: #007bff;
+    --login-bg-gradient-end: #0056b3;
+    --login-card-bg: rgba(255, 255, 255, 0.95);
+    --login-card-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
 }
 
 /* Estilos Globais */
 body {
-    font-family: 'Poppins', sans-serif; /* Fonte moderna do Google Fonts */
+    font-family: 'Poppins', sans-serif;
     background-color: var(--background-light);
     color: var(--text-dark);
-    overflow-x: hidden; /* Evita rolagem horizontal indesejada */
-    margin: 0; /* Remove margem padrão do body */
+    overflow-x: hidden;
+    margin: 0;
 }
 
-h1, h2, h3, h4, h5, h6 {
-    color: var(--text-dark);
-    font-weight: 600; /* Um pouco mais de peso para títulos */
-}
-
-/* Estilos para o Wrapper Principal (Sidebar + Conteúdo) */
 #wrapper {
     display: flex;
+    width: 100%;
+    align-items: stretch;
 }
 
-/* Estilos da Sidebar */
+/* Sidebar Estilos */
 #sidebar-wrapper {
     min-height: 100vh;
-    margin-left: -15rem; /* Esconde a sidebar por padrão em telas pequenas */
-    transition: margin .25s ease-out; /* Transição suave para abrir/fechar */
+    width: 15rem;
+    margin-left: 0; /* Visível por padrão no Desktop */
+    transition: margin .25s ease-out;
     background-color: var(--sidebar-bg) !important;
     border-right: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0; /* Impede a sidebar de encolher */
 }
 
 #sidebar-wrapper .sidebar-heading {
     padding: 1.5rem 1.25rem;
     font-size: 1.2rem;
     color: var(--text-light);
-    background-color: var(--sidebar-header-bg); /* Cor de destaque para o cabeçalho da sidebar */
+    background-color: var(--sidebar-header-bg);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
     align-items: center;
@@ -71,26 +60,27 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 #sidebar-wrapper .sidebar-heading img {
-    height: 30px; /* Tamanho da logo na sidebar */
+    height: 30px;
     margin-right: 10px;
 }
 
 #sidebar-wrapper .list-group {
-    width: 15rem; /* Largura da sidebar */
+    width: 15rem;
 }
 
 #sidebar-wrapper .list-group-item {
     border: none;
     padding: 1rem 1.25rem;
-    color: rgba(255, 255, 255, 0.7); /* Cor do texto dos links */
-    background-color: transparent; /* Fundo transparente para os links */
+    color: rgba(255, 255, 255, 0.7);
+    background-color: transparent;
     transition: background-color 0.3s ease, color 0.3s ease;
     display: flex;
     align-items: center;
+    text-decoration: none;
 }
 
 #sidebar-wrapper .list-group-item i {
-    margin-right: 10px; /* Espaçamento entre ícone e texto */
+    margin-right: 10px;
 }
 
 #sidebar-wrapper .list-group-item:hover {
@@ -99,34 +89,35 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 #sidebar-wrapper .list-group-item.active {
-    background-color: var(--primary-color) !important; /* Item ativo com cor primária */
+    background-color: var(--primary-color) !important;
     color: var(--text-light) !important;
     font-weight: 500;
 }
 
-/* Estilos para o Conteúdo da Página */
+/* Conteúdo da Página */
 #page-content-wrapper {
-    min-width: 100vw; /* Ocupa 100% da largura da viewport */
+    width: 100%;
+    min-width: 0; /* Permite que o conteúdo se ajuste corretamente */
+    background-color: var(--background-light);
 }
 
-/* Toggle da Sidebar */
+/* Ajuste do comportamento Toggled (Esconder Sidebar no Desktop) */
 #wrapper.toggled #sidebar-wrapper {
-    margin-left: 0; /* Mostra a sidebar quando toggled */
+    margin-left: -15rem;
 }
 
-/* Media Queries para Responsividade */
-@media (min-width: 768px) {
+/* Media Queries para Responsividade (Mobile) */
+@media (max-width: 768px) {
     #sidebar-wrapper {
-        margin-left: 0; /* Sidebar visível por padrão em telas maiores */
-    }
-
-    #page-content-wrapper {
-        min-width: 0;
-        width: 100%;
+        margin-left: -15rem; /* Escondido por padrão no Mobile */
     }
 
     #wrapper.toggled #sidebar-wrapper {
-        margin-left: -15rem; /* Esconde a sidebar em telas maiores quando toggled */
+        margin-left: 0; /* Mostra a sidebar ao clicar no Mobile */
+    }
+
+    #page-content-wrapper {
+        min-width: 100vw;
     }
 }
 
@@ -138,216 +129,40 @@ h1, h2, h3, h4, h5, h6 {
     box-shadow: var(--card-shadow);
 }
 
-.navbar .btn-primary {
-    background-color: var(--primary-color);
-    border-color: var(--primary-color);
-    color: var(--text-light);
-}
-
-.navbar .btn-primary:hover {
-    background-color: var(--sidebar-link-hover);
-    border-color: var(--sidebar-link-hover);
-}
-
-.navbar-nav .nav-link {
-    color: var(--text-dark);
-    font-weight: 500;
-}
-
-/* Cards de Resumo no Dashboard */
+/* Botões e Cards */
 .card {
     border: none;
-    border-radius: 0.75rem; /* Bordas mais arredondadas */
+    border-radius: 0.75rem;
     box-shadow: var(--card-shadow);
     background-color: var(--card-bg);
 }
 
-.card.text-white {
-    color: var(--text-light) !important;
-}
-
+.card.text-white { color: var(--text-light) !important; }
 .card.bg-primary { background-color: var(--primary-color) !important; }
 .card.bg-success { background-color: var(--secondary-color) !important; }
-.card.bg-info { background-color: var(--info-color) !important; } /* Usando a variável info-color */
+.card.bg-info { background-color: var(--info-color) !important; }
 .card.bg-warning { background-color: var(--warning-color) !important; }
 .card.bg-danger { background-color: var(--danger-color) !important; }
 
-
-.card-body .fa-3x {
-    opacity: 0.7; /* Ícones com leve transparência */
-}
-
-/* Estilos para o PDV */
-#productSearch {
-    border-radius: 0.375rem;
-}
-
-#searchResults {
-    position: absolute; /* Necessário para a lista de resultados flutuar */
-    z-index: 1000;
-    width: calc(100% - 30px); /* Ajuste para a largura do container */
-    max-height: 200px;
-    overflow-y: auto;
-    background-color: var(--card-bg);
-    border: 1px solid #dee2e6;
-    border-top: none;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    border-radius: 0 0 0.375rem 0.375rem; /* Bordas arredondadas apenas na parte inferior */
-}
-
-#searchResults .list-group-item {
-    cursor: pointer;
-}
-#searchResults .list-group-item:hover {
-    background-color: #f8f9fa;
-}
-
-.list-group-item-action:hover {
-    background-color: #e9ecef;
-}
-
+/* PDV e Carrinho */
 .cart-table-scroll {
-    max-height: 300px; /* Altura máxima para a tabela do carrinho com scroll */
+    max-height: 400px;
     overflow-y: auto;
-    border: 1px solid #dee2e6;
-    border-radius: 0.375rem;
-}
-
-.quantity-input {
-    width: 80px !important;
-}
-
-/* NOVO ESTILO PARA O CABEÇALHO DO CARRINHO */
-.cart-header-with-button {
-    display: flex;
-    justify-content: space-between; /* Espaça o título e o botão */
-    align-items: center; /* Alinha verticalmente */
-}
-
-/* Estilos para o modal de cupom */
-#receiptModal .modal-content {
-    border-radius: 0.5rem;
 }
 
 #receiptContent {
-    font-family: 'Courier New', Courier, monospace; /* Fonte monoespaçada para cupom */
-    font-size: 1.0em; /* CORREÇÃO: Aumentado para 1.0em */
-    line-height: 1.5; /* CORREÇÃO: Aumentado para 1.5 para melhor espaçamento */
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 1.0em;
+    line-height: 1.5;
     color: #333;
-    font-weight: bold; /* CORREÇÃO: Adicionado negrito */
+    font-weight: bold;
 }
 
-/* Estilo para a linha divisória entre cupons no modal */
-#receiptContent hr {
-    border-top: 2px dashed #ccc; /* CORREÇÃO: Espessura da linha */
-    margin: 20px 0; /* CORREÇÃO: Maior espaçamento entre cupons */
-}
-
-/* Botões Customizados */
-.btn-success {
-    background-color: var(--secondary-color);
-    border-color: var(--secondary-color);
-    color: var(--text-light);
-}
-.btn-success:hover {
-    background-color: #218838; /* Um tom mais escuro do verde */
-    border-color: #1e7e34;
-}
-
-.btn-primary {
-    background-color: var(--primary-color);
-    border-color: var(--primary-color);
-    color: var(--text-light);
-}
-.btn-primary:hover {
-    background-color: var(--sidebar-link-hover);
-    border-color: var(--sidebar-link-hover);
-}
-
-.btn-danger {
-    background-color: var(--danger-color);
-    border-color: var(--danger-color);
-    color: var(--text-light);
-}
-.btn-danger:hover {
-    background-color: #c82333;
-    border-color: #bd2130;
-}
-
-.btn-warning {
-    background-color: var(--warning-color);
-    border-color: var(--warning-color);
-    color: var(--text-dark); /* Para garantir boa legibilidade */
-}
-.btn-warning:hover {
-    background-color: #e0a800;
-    border-color: #d39e00;
-}
-
-/* Ajustes para formulários */
-.form-control, .form-select {
-    border-radius: 0.375rem;
-    border-color: #ced4da;
-}
-.form-control:focus, .form-select:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 0.25rem rgba(0, 123, 255, 0.25); /* Sombra de foco com cor primária */
-}
-
-/* Flash messages */
-.alert {
-    border-radius: 0.375rem;
-    font-weight: 500;
-}
-
-/* --- Estilos Específicos para a Tela de Login --- */
+/* Tela de Login */
 .login-body {
     background: linear-gradient(135deg, var(--login-bg-gradient-start) 0%, var(--login-bg-gradient-end) 100%);
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 100vh;
-    margin: 0;
-    overflow: hidden; /* Garante que o gradiente preencha tudo sem scroll */
-}
-
-.login-container {
-    max-width: 100%;
-    padding: 15px;
-}
-
-.login-card {
-    background-color: var(--login-card-bg); /* Fundo semi-transparente para o card */
-    border-radius: 1rem;
-    box-shadow: var(--login-card-shadow);
-    backdrop-filter: blur(5px); /* Efeito de desfoque no fundo do card */
-    -webkit-backdrop-filter: blur(5px); /* Compatibilidade Safari */
-}
-
-.login-logo {
-    max-height: 80px; /* Ajuste o tamanho da logo conforme necessário */
-    width: auto;
-    display: block; /* Garante que a imagem se comporte como bloco para centralização */
-    margin: 0 auto; /* Centraliza a logo */
-}
-
-.login-card .text-primary {
-    color: var(--primary-color) !important;
-}
-
-.login-card .form-control,
-.login-card .btn {
-    border-radius: 0.5rem;
-}
-
-.login-card .btn-primary {
-    background-color: var(--primary-color);
-    border-color: var(--primary-color);
-    transition: background-color 0.3s ease, border-color 0.3s ease;
-    color: var(--text-light);
-}
-
-.login-card .btn-primary:hover {
-    background-color: var(--sidebar-link-hover); /* Um tom mais escuro do primário */
-    border-color: var(--sidebar-link-hover);
 }
