@@ -6,7 +6,7 @@
 <h1 class="mb-4">Dashboard</h1>
 
 <div class="row mb-4">
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card text-white bg-primary mb-3">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center">
@@ -19,7 +19,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card text-white bg-success mb-3">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center">
@@ -32,7 +32,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card text-white bg-info mb-3">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center">
@@ -41,6 +41,19 @@
                         <p class="card-text fs-3">R$ {{ "%.2f"|format(total_revenue_today) }}</p>
                     </div>
                     <i class="fas fa-dollar-sign fa-3x"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-danger mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="card-title">Estoque Baixo</h5>
+                        <p class="card-text fs-3">{{ low_stock_count }}</p>
+                    </div>
+                    <i class="fas fa-exclamation-triangle fa-3x"></i>
                 </div>
             </div>
         </div>

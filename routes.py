@@ -54,22 +54,43 @@ def logout():
 def dashboard():
     if not current_user.is_admin():
         return redirect(url_for('main.pdv'))
-    
     total_products = Product.query.count()
     today = datetime.utcnow().date()
     total_sales_today = Sale.query.filter(func.date(Sale.timestamp) == today).count()
     total_revenue_today = db.session.query(func.sum(Sale.total_amount)).filter(func.date(Sale.timestamp) == today).scalar() or 0
     
-    # Produtos para reposição (estoque baixo - exemplo: menos de 5 unidades)
-    products_to_restock = Product.query.filter(Product.stock <= 5).all()
-    restock_count = len(products_to_restock)
-
+    # Alerta de estoque baixo (Ex: unidades <= 5)
+    low_stock_count = Product.query.filter(Product.stock <= 5).count()
+    
     return render_template('dashboard.html', 
                            total_products=total_products, 
                            total_sales_today=total_sales_today, 
                            total_revenue_today=total_revenue_today,
-                           restock_count=restock_count,
-                           products_to_restock=products_to_restock)
+                           low_stock_count=low_stock_count)
+
+# --- APIs para Gráficos ---
+@main_bp.route('/reports/top_products')
+@admin_required
+def top_products_api():
+    # Top 5 produtos por quantidade vendida
+    top_products_data = db.session.query(
+        Product.name,
+        func.sum(SaleItem.quantity).label('quantity')
+    ).join(SaleItem).group_by(Product.id).order_by(func.sum(SaleItem.quantity).desc()).limit(5).all()
+    
+    return jsonify([{'name': p.name, 'quantity': int(p.quantity)} for p in top_products_data])
+
+@main_bp.route('/reports/daily_sales')
+@admin_required
+def daily_sales_api():
+    # Receita dos últimos 7 dias
+    today = datetime.utcnow().date()
+    sales_data = []
+    for i in range(6, -1, -1):
+        day = today - timedelta(days=i)
+        revenue = db.session.query(func.sum(Sale.total_amount)).filter(func.date(Sale.timestamp) == day).scalar() or 0
+        sales_data.append({'date': day.strftime('%d/%m'), 'revenue': float(revenue)})
+    return jsonify(sales_data)
 
 # --- Gerenciamento de Produtos ---
 @main_bp.route('/products')
@@ -123,7 +144,7 @@ def delete_product(product_id):
     product = Product.query.get_or_404(product_id)
     db.session.delete(product)
     db.session.commit()
-    flash('Produto excluído!', 'success')
+    flash('Produto excluído com sucesso!', 'success')
     return redirect(url_for('main.products'))
 
 @main_bp.route('/products/import', methods=['GET', 'POST'])
@@ -219,7 +240,7 @@ def add_user():
     form = UserForm()
     if form.validate_on_submit():
         hp = generate_password_hash(form.password.data, method='pbkdf2:sha256')
-        new_user = User(username=form.username.data, password_hash=hp, is_admin=form.is_admin.data)
+        new_user = User(username=form.username.data, password_hash=hp, role=form.role.data)
         db.session.add(new_user)
         db.session.commit()
         return redirect(url_for('main.users'))

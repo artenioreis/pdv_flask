@@ -1,128 +1,79 @@
 // static/js/dashboard.js
 document.addEventListener('DOMContentLoaded', function() {
-    // Função para buscar dados e renderizar o gráfico de Top Produtos
+    // Função para buscar dados e renderizar o gráfico de Top Produtos (COLUNAS)
     function fetchTopProducts() {
-        fetch('/reports/top_products') // Novo endpoint para top produtos
+        fetch('/reports/top_products')
             .then(response => {
-                if (!response.ok) {
-                    throw new Error('Erro ao buscar dados de top produtos.');
-                }
+                if (!response.ok) throw new Error('Erro ao buscar dados de top produtos.');
                 return response.json();
             })
             .then(data => {
                 const ctx = document.getElementById('topProductsChart').getContext('2d');
                 new Chart(ctx, {
-                    type: 'bar',
+                    type: 'bar', // Gráfico de Colunas/Barras
                     data: {
                         labels: data.map(item => item.name),
                         datasets: [{
                             label: 'Quantidade Vendida',
                             data: data.map(item => item.quantity),
-                            backgroundColor: [
-                                'rgba(0, 123, 255, 0.7)', // primary-color
-                                'rgba(40, 167, 69, 0.7)',  // secondary-color
-                                'rgba(23, 162, 184, 0.7)', // info-color
-                                'rgba(255, 193, 7, 0.7)',  // warning-color
-                                'rgba(220, 53, 69, 0.7)'   // danger-color
-                            ],
-                            borderColor: [
-                                'rgba(0, 123, 255, 1)',
-                                'rgba(40, 167, 69, 1)',
-                                'rgba(23, 162, 184, 1)',
-                                'rgba(255, 193, 7, 1)',
-                                'rgba(220, 53, 69, 1)'
-                            ],
+                            backgroundColor: 'rgba(0, 123, 255, 0.7)',
+                            borderColor: 'rgba(0, 123, 255, 1)',
                             borderWidth: 1
                         }]
                     },
                     options: {
                         responsive: true,
                         scales: {
-                            y: {
-                                beginAtZero: true,
-                                title: {
-                                    display: true,
-                                    text: 'Quantidade'
-                                }
-                            },
-                            x: {
-                                title: {
-                                    display: true,
-                                    text: 'Produto'
-                                }
-                            }
+                            y: { beginAtZero: true }
                         },
-                        plugins: {
-                            legend: {
-                                display: false // Não precisa de legenda para um único dataset
-                            }
-                        }
+                        plugins: { legend: { display: false } }
                     }
                 });
             })
             .catch(error => {
-                console.error('Erro ao carregar gráfico de top produtos:', error);
-                document.getElementById('topProductsChart').parentElement.innerHTML = '<p class="text-danger text-center">Não foi possível carregar o gráfico de produtos mais vendidos.</p>';
+                console.error(error);
+                document.getElementById('topProductsChart').parentElement.innerHTML = '<p class="text-danger text-center">Dados de venda insuficientes.</p>';
             });
     }
 
-    // Função para buscar dados e renderizar o gráfico de Vendas Diárias
+    // Função para buscar dados e renderizar o gráfico de Vendas Diárias (LINHA)
     function fetchDailySales() {
-        fetch('/reports/daily_sales') // Novo endpoint para vendas diárias
+        fetch('/reports/daily_sales')
             .then(response => {
-                if (!response.ok) {
-                    throw new Error('Erro ao buscar dados de vendas diárias.');
-                }
+                if (!response.ok) throw new Error('Erro ao buscar dados de vendas diárias.');
                 return response.json();
             })
             .then(data => {
                 const ctx = document.getElementById('dailySalesChart').getContext('2d');
                 new Chart(ctx, {
-                    type: 'line',
+                    type: 'line', // Gráfico de Linha
                     data: {
-                        labels: data.map(item => item.date), // Datas formatadas
+                        labels: data.map(item => item.date),
                         datasets: [{
                             label: 'Receita Diária (R$)',
                             data: data.map(item => item.revenue),
-                            backgroundColor: 'rgba(0, 123, 255, 0.2)', // primary-color com transparência
-                            borderColor: 'rgba(0, 123, 255, 1)', // primary-color
+                            backgroundColor: 'rgba(40, 167, 69, 0.2)',
+                            borderColor: 'rgba(40, 167, 69, 1)',
                             borderWidth: 2,
                             fill: true,
-                            tension: 0.3 // Suaviza a linha
+                            tension: 0.3
                         }]
                     },
                     options: {
                         responsive: true,
                         scales: {
-                            y: {
-                                beginAtZero: true,
-                                title: {
-                                    display: true,
-                                    text: 'Receita (R$)'
-                                }
-                            },
-                            x: {
-                                title: {
-                                    display: true,
-                                    text: 'Data'
-                                }
-                            }
+                            y: { beginAtZero: true }
                         },
-                        plugins: {
-                            legend: {
-                                display: false
-                            }
-                        }
+                        plugins: { legend: { display: false } }
                     }
                 });
             })
             .catch(error => {
-                console.error('Erro ao carregar gráfico de vendas diárias:', error);
-                document.getElementById('dailySalesChart').parentElement.innerHTML = '<p class="text-danger text-center">Não foi possível carregar o gráfico de vendas diárias.</p>';
+                console.error(error);
+                document.getElementById('dailySalesChart').parentElement.innerHTML = '<p class="text-danger text-center">Sem dados para os últimos 7 dias.</p>';
             });
     }
 
-    // Chama as funções para carregar os gráficos quando a página é carregada
     fetchTopProducts();
     fetchDailySales();
 });
