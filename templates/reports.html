@@ -1,74 +1,76 @@
 {% extends "base.html" %}
 {% block title %}Relatórios{% endblock %}
 {% block content %}
-<h1 class="mb-4">Relatórios</h1>
+<div class="container-fluid">
+    <h1 class="mb-4">Relatórios do Sistema</h1>
 
-<div class="row">
-    <div class="col-md-6">
-        <div class="card mb-4">
-            <div class="card-header">
-                Relatório de Caixa
-            </div>
-            <div class="card-body">
-                <div class="form-group">
-                    <label for="cashReportStartDate">Data Inicial:</label>
-                    <input type="date" class="form-control" id="cashReportStartDate">
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-cash-register me-1"></i> Relatório de Caixa (por Operador)
                 </div>
-                <div class="form-group">
-                    <label for="cashReportEndDate">Data Final:</label>
-                    <input type="date" class="form-control" id="cashReportEndDate">
-                </div>
-                <button class="btn btn-primary btn-block" id="generateCashReportBtn">Gerar Relatório de Caixa</button>
+                <div class="card-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col">
+                            <label class="form-label">Data Inicial:</label>
+                            <input type="date" class="form-control" id="cashReportStartDate">
+                        </div>
+                        <div class="col">
+                            <label class="form-label">Data Final:</label>
+                            <input type="date" class="form-control" id="cashReportEndDate">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary w-100 mb-2" id="generateCashReportBtn">Gerar Relatório</button>
+                    <button class="btn btn-outline-secondary w-100" id="printCashReportBtn" style="display: none;">
+                        <i class="fas fa-print"></i> Imprimir Relatório de Caixa
+                    </button>
 
-                <div id="cashReportResults" class="mt-4" style="display: none;">
-                    <h5>Resumo do Caixa</h5>
-                    <p>Vendas em Dinheiro: <strong id="cashSalesAmount"></strong></p>
-                    <p>Vendas em Cartão: <strong id="cardSalesAmount"></strong></p>
-                    <p>Vendas em Pix: <strong id="pixSalesAmount"></strong></p>
-                    <p>Total Geral de Vendas: <strong id="totalSalesAmount"></strong></p>
-
-                    <h6 class="mt-3">Detalhes das Vendas:</h6>
-                    <table class="table table-sm table-striped">
-                        <thead>
-                            <tr>
-                                <th>ID Venda</th>
-                                <th>Data/Hora</th>
-                                <th>Valor</th>
-                                <th>Pagamento</th>
-                                <th>Operador</th>
-                            </tr>
-                        </thead>
-                        <tbody id="cashSalesList">
-                            <!-- Detalhes das vendas aqui -->
-                        </tbody>
-                    </table>
+                    <div id="cashReportResults" class="mt-4" style="display: none;">
+                        <div id="printableCashArea">
+                            <h5 class="text-center">Resumo Financeiro por Operador</h5>
+                            <hr>
+                            <div id="operatorTablesContainer">
+                                </div>
+                            <div class="alert alert-info mt-3">
+                                <strong>TOTAL GERAL (TODOS OS CAIXAS): R$ <span id="totalGeneralAmount">0.00</span></strong>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <div class="col-md-6">
-        <div class="card mb-4">
-            <div class="card-header">
-                Relatório de Estoque
-            </div>
-            <div class="card-body">
-                <button class="btn btn-primary btn-block" id="generateStockReportBtn">Gerar Relatório de Estoque</button>
+        <div class="col-md-6">
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <i class="fas fa-boxes me-1"></i> Relatório de Estoque e Valor Inventariado
+                </div>
+                <div class="card-body">
+                    <button class="btn btn-success w-100 mb-2" id="generateStockReportBtn">Gerar Relatório de Estoque</button>
+                    <button class="btn btn-outline-secondary w-100" id="printStockReportBtn" style="display: none;">
+                        <i class="fas fa-print"></i> Imprimir Relatório de Estoque
+                    </button>
 
-                <div id="stockReportResults" class="mt-4" style="display: none;">
-                    <h5>Disponibilidade de Produtos</h5>
-                    <table class="table table-sm table-striped">
-                        <thead>
-                            <tr>
-                                <th>Produto</th>
-                                <th>Estoque</th>
-                                <th>Preço</th>
-                            </tr>
-                        </thead>
-                        <tbody id="stockList">
-                            <!-- Detalhes do estoque aqui -->
-                        </tbody>
-                    </table>
+                    <div id="stockReportResults" class="mt-4" style="display: none;">
+                        <div id="printableStockArea">
+                            <h5 class="text-center">Inventário de Produtos</h5>
+                            <table class="table table-sm table-striped mt-3">
+                                <thead>
+                                    <tr>
+                                        <th>Produto</th>
+                                        <th>Qtd</th>
+                                        <th>Preço Un.</th>
+                                        <th>Valor Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stockList"></tbody>
+                            </table>
+                            <div class="alert alert-success mt-3 text-end">
+                                <strong>Valor Total em Estoque: R$ <span id="totalStockValue">0.00</span></strong>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -79,66 +81,84 @@
 {% block scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Relatório de Caixa
+        
+        // Função Auxiliar para Impressão
+        function printDiv(divId, title) {
+            const content = document.getElementById(divId).innerHTML;
+            const win = window.open('', '_blank');
+            win.document.write(`<html><head><title>${title}</title>`);
+            win.document.write('<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">');
+            win.document.write('<style>body{padding:20px;} .alert{border:1px solid #000;}</style></head><body>');
+            win.document.write(`<h2 class="text-center">${title}</h2><p class="text-center">Gerado em: ${new Date().toLocaleString()}</p>`);
+            win.document.write(content);
+            win.document.write('</body></html>');
+            setTimeout(() => { win.print(); win.close(); }, 500);
+        }
+
+        // --- RELATÓRIO DE CAIXA ---
         document.getElementById('generateCashReportBtn').addEventListener('click', function() {
             const startDate = document.getElementById('cashReportStartDate').value;
             const endDate = document.getElementById('cashReportEndDate').value;
+            
             fetch(`/reports/cash_flow?start_date=${startDate}&end_date=${endDate}`)
                 .then(response => response.json())
                 .then(data => {
-                    document.getElementById('cashSalesAmount').textContent = `R$ ${data.cash_sales.toFixed(2)}`;
-                    document.getElementById('cardSalesAmount').textContent = `R$ ${data.card_sales.toFixed(2)}`;
-                    document.getElementById('pixSalesAmount').textContent = `R$ ${data.pix_sales.toFixed(2)}`;
-                    document.getElementById('totalSalesAmount').textContent = `R$ ${data.total_sales.toFixed(2)}`;
-
-                    const salesListBody = document.getElementById('cashSalesList');
-                    salesListBody.innerHTML = '';
-                    if (data.sales_list.length === 0) {
-                        salesListBody.innerHTML = '<tr><td colspan="5" class="text-center">Nenhuma venda encontrada para o período.</td></tr>';
-                    } else {
-                        data.sales_list.forEach(sale => {
-                            const row = `
-                                <tr>
-                                    <td>${sale.id}</td>
-                                    <td>${sale.timestamp}</td>
-                                    <td>R$ ${sale.total_amount.toFixed(2)}</td>
-                                    <td>${sale.payment_method}</td>
-                                    <td>${sale.operator}</td>
-                                </tr>
-                            `;
-                            salesListBody.insertAdjacentHTML('beforeend', row);
-                        });
+                    const container = document.getElementById('operatorTablesContainer');
+                    container.innerHTML = '';
+                    
+                    for (const [operator, values] of Object.entries(data.operators)) {
+                        const card = `
+                            <div class="card border-dark mb-3">
+                                <div class="card-header bg-light"><strong>Operador: ${operator}</strong></div>
+                                <div class="card-body p-2">
+                                    <table class="table table-sm table-bordered mb-0" style="font-size: 0.9rem;">
+                                        <tr><td>Dinheiro</td><td class="text-end">R$ ${values.Dinheiro.toFixed(2)}</td></tr>
+                                        <tr><td>Cartão Crédito</td><td class="text-end">R$ ${values['Cartao Credito'].toFixed(2)}</td></tr>
+                                        <tr><td>Cartão Débito</td><td class="text-end">R$ ${values['Cartao Debito'].toFixed(2)}</td></tr>
+                                        <tr><td>Pix</td><td class="text-end">R$ ${values.Pix.toFixed(2)}</td></tr>
+                                        <tr class="table-secondary"><td><strong>Total</strong></td><td class="text-end"><strong>R$ ${values.Total.toFixed(2)}</strong></td></tr>
+                                    </table>
+                                </div>
+                            </div>
+                        `;
+                        container.insertAdjacentHTML('beforeend', card);
                     }
+                    
+                    document.getElementById('totalGeneralAmount').textContent = data.total_general.toFixed(2);
                     document.getElementById('cashReportResults').style.display = 'block';
+                    document.getElementById('printCashReportBtn').style.display = 'block';
                 })
-                .catch(error => console.error('Erro ao gerar relatório de caixa:', error));
+                .catch(err => alert('Erro ao buscar dados do caixa.'));
         });
 
-        // Relatório de Estoque
+        document.getElementById('printCashReportBtn').addEventListener('click', () => printDiv('printableCashArea', 'Relatório de Fechamento de Caixa'));
+
+        // --- RELATÓRIO DE ESTOQUE ---
         document.getElementById('generateStockReportBtn').addEventListener('click', function() {
             fetch('/reports/stock')
                 .then(response => response.json())
                 .then(data => {
-                    const stockListBody = document.getElementById('stockList');
-                    stockListBody.innerHTML = '';
-                    if (data.length === 0) {
-                        stockListBody.innerHTML = '<tr><td colspan="3" class="text-center">Nenhum produto em estoque.</td></tr>';
-                    } else {
-                        data.forEach(product => {
-                            const row = `
-                                <tr>
-                                    <td>${product.name}</td>
-                                    <td>${product.stock}</td>
-                                    <td>R$ ${product.price.toFixed(2)}</td>
-                                </tr>
-                            `;
-                            stockListBody.insertAdjacentHTML('beforeend', row);
-                        });
-                    }
+                    const list = document.getElementById('stockList');
+                    list.innerHTML = '';
+                    
+                    data.products.forEach(p => {
+                        list.insertAdjacentHTML('beforeend', `
+                            <tr>
+                                <td>${p.name}</td>
+                                <td>${p.stock}</td>
+                                <td>R$ ${p.price.toFixed(2)}</td>
+                                <td class="text-end">R$ ${p.value.toFixed(2)}</td>
+                            </tr>
+                        `);
+                    });
+                    
+                    document.getElementById('totalStockValue').textContent = data.total_value.toFixed(2);
                     document.getElementById('stockReportResults').style.display = 'block';
-                })
-                .catch(error => console.error('Erro ao gerar relatório de estoque:', error));
+                    document.getElementById('printStockReportBtn').style.display = 'block';
+                });
         });
+
+        document.getElementById('printStockReportBtn').addEventListener('click', () => printDiv('printableStockArea', 'Relatório de Inventário de Estoque'));
     });
 </script>
 {% endblock %}
