@@ -1,4 +1,4 @@
-    {% extends "base.html" %}
+{% extends "base.html" %}
     {% block title %}Usuários{% endblock %}
     {% block content %}
     <h1 class="mb-4">Gerenciamento de Usuários</h1>
@@ -22,10 +22,10 @@
                 <td>{{ user.email }}</td>
                 <td>{{ user.role }}</td>
                 <td>
-                    <!-- Adicionar botões de editar/excluir usuário se necessário -->
-                    <!-- Por simplicidade, vamos apenas listar por enquanto -->
-                    <a href="#" class="btn btn-sm btn-info disabled">Editar</a>
-                    <button class="btn btn-sm btn-danger disabled">Excluir</button>
+                    <a href="{{ url_for('main.add_user') }}" class="btn btn-sm btn-info">Editar</a>
+                    <form action="{{ url_for('main.delete_user', user_id=user.id) }}" method="POST" class="d-inline">
+                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Tem certeza que deseja excluir este usuário?');">Excluir</button>
+                    </form>
                 </td>
             </tr>
             {% else %}
