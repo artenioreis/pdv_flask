@@ -54,11 +54,22 @@ def logout():
 def dashboard():
     if not current_user.is_admin():
         return redirect(url_for('main.pdv'))
+    
     total_products = Product.query.count()
     today = datetime.utcnow().date()
     total_sales_today = Sale.query.filter(func.date(Sale.timestamp) == today).count()
     total_revenue_today = db.session.query(func.sum(Sale.total_amount)).filter(func.date(Sale.timestamp) == today).scalar() or 0
-    return render_template('dashboard.html', total_products=total_products, total_sales_today=total_sales_today, total_revenue_today=total_revenue_today)
+    
+    # Produtos para reposição (estoque baixo - exemplo: menos de 5 unidades)
+    products_to_restock = Product.query.filter(Product.stock <= 5).all()
+    restock_count = len(products_to_restock)
+
+    return render_template('dashboard.html', 
+                           total_products=total_products, 
+                           total_sales_today=total_sales_today, 
+                           total_revenue_today=total_revenue_today,
+                           restock_count=restock_count,
+                           products_to_restock=products_to_restock)
 
 # --- Gerenciamento de Produtos ---
 @main_bp.route('/products')
@@ -106,14 +117,13 @@ def edit_product(product_id):
         return redirect(url_for('main.products'))
     return render_template('add_edit_product.html', title='Editar Produto', form=form)
 
-# ROTA RESTAURADA PARA CORRIGIR O BUILDERROR NO TEMPLATE PRODUCTS.HTML
 @main_bp.route('/product/delete/<int:product_id>', methods=['POST'])
 @admin_required
 def delete_product(product_id):
     product = Product.query.get_or_404(product_id)
     db.session.delete(product)
     db.session.commit()
-    flash('Produto excluído com sucesso!', 'success')
+    flash('Produto excluído!', 'success')
     return redirect(url_for('main.products'))
 
 @main_bp.route('/products/import', methods=['GET', 'POST'])
