@@ -8,21 +8,20 @@ import json
 from functools import wraps
 import pandas as pd
 import io
+import time
 from sqlalchemy import or_, func
-from werkzeug.security import generate_password_hash # Importar para setar senha de admin inicial
+from werkzeug.security import generate_password_hash
 
-# Importar as classes de modelo aqui
+# Importar as classes de modelo
 from models import User, Product, Sale, SaleItem
 
 main_bp = Blueprint('main', __name__)
 
-# --- Decoradores Personalizados ---
+# --- Decoradores ---
 
 def admin_required(f):
     """
     Decorador para rotas que exigem que o usuário autenticado seja um administrador.
-    Redireciona para o dashboard com uma mensagem de erro se o usuário não for admin.
-    Usa @wraps para preservar os metadados da função original, evitando erros de endpoint.
     """
     @wraps(f)
     @login_required
@@ -38,11 +37,6 @@ def admin_required(f):
 @main_bp.route('/', methods=['GET', 'POST'])
 @main_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    """
-    Rota para o login de usuários.
-    Se o usuário já estiver autenticado, redireciona para o dashboard.
-    Processa o formulário de login, autentica o usuário e redireciona.
-    """
     if current_user.is_authenticated:
         return redirect(url_for('main.dashboard'))
 
@@ -61,10 +55,6 @@ def login():
 @main_bp.route('/logout')
 @login_required
 def logout():
-    """
-    Rota para logout de usuários.
-    Desconecta o usuário e redireciona para a página de login.
-    """
     logout_user()
     flash('Você foi desconectado.', 'info')
     return redirect(url_for('main.login'))
@@ -74,11 +64,6 @@ def logout():
 @main_bp.route('/dashboard')
 @login_required
 def dashboard():
-    """
-    Dashboard principal do sistema.
-    Se o usuário não for administrador, redireciona-o diretamente para o PDV.
-    Para administradores, exibe um resumo de produtos e vendas do dia.
-    """
     if not current_user.is_admin():
         return redirect(url_for('main.pdv'))
 
@@ -92,60 +77,60 @@ def dashboard():
                            total_sales_today=total_sales_today,
                            total_revenue_today=total_revenue_today)
 
-# --- Rotas de Gerenciamento de Produtos (Admin Apenas) ---
+# --- Rotas de Gerenciamento de Produtos ---
 
 @main_bp.route('/products')
 @admin_required
 def products():
-    """
-    Lista todos os produtos cadastrados no sistema.
-    Apenas administradores podem acessar.
-    """
     products = Product.query.all()
     return render_template('products.html', products=products)
 
 @main_bp.route('/product/add', methods=['GET', 'POST'])
 @admin_required
 def add_product():
-    """
-    Adiciona um novo produto ao sistema.
-    Apenas administradores podem acessar.
-    """
     form = ProductForm()
     if form.validate_on_submit():
+        # LÓGICA PARA EVITAR IntegrityError NO BARCODE
+        barcode_val = form.barcode.data.strip() if form.barcode.data else ""
+        if not barcode_val:
+            # Gera um código automático baseado no tempo para evitar o erro de UNIQUE
+            barcode_val = f"SEM-COD-{int(time.time())}"
+
         new_product = Product(
             name=form.name.data,
             description=form.description.data,
             price=form.price.data,
             stock=form.stock.data,
-            barcode=form.barcode.data
+            barcode=barcode_val
         )
-        # Atribui o campo opcional, garantindo que seja None se vazio
+        
         if form.return_alert_days.data is not None and form.return_alert_days.data != '':
             new_product.return_alert_days = form.return_alert_days.data
         else:
             new_product.return_alert_days = None
 
-        db.session.add(new_product)
-        db.session.commit()
-        flash('Produto adicionado com sucesso!', 'success')
-        return redirect(url_for('main.products'))
+        try:
+            db.session.add(new_product)
+            db.session.commit()
+            flash('Produto adicionado com sucesso!', 'success')
+            return redirect(url_for('main.products'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao salvar: O código de barras "{barcode_val}" já existe.', 'danger')
+            
     return render_template('add_edit_product.html', title='Adicionar Produto', form=form)
 
 @main_bp.route('/product/edit/<int:product_id>', methods=['GET', 'POST'])
 @admin_required
 def edit_product(product_id):
-    """
-    Edita um produto existente no sistema.
-    Apenas administradores podem acessar.
-    """
     product = Product.query.get_or_404(product_id)
-    form = ProductForm(obj=product) # Preenche o formulário com os dados do produto
+    form = ProductForm(obj=product)
     if form.validate_on_submit():
-        form.populate_obj(product) # Atualiza o objeto produto com os dados do formulário
-        # Garante que o campo opcional seja None se vazio
-        if form.return_alert_days.data is not None and form.return_alert_days.data == '':
-            product.return_alert_days = None
+        form.populate_obj(product)
+        # Garante que não fique vazio no edit também para não dar erro
+        if not product.barcode or not product.barcode.strip():
+            product.barcode = f"SEM-COD-{int(time.time())}"
+        
         db.session.commit()
         flash('Produto atualizado com sucesso!', 'success')
         return redirect(url_for('main.products'))
@@ -154,10 +139,6 @@ def edit_product(product_id):
 @main_bp.route('/product/delete/<int:product_id>', methods=['POST'])
 @admin_required
 def delete_product(product_id):
-    """
-    Exclui um produto do sistema.
-    Apenas administradores podem acessar.
-    """
     product = Product.query.get_or_404(product_id)
     db.session.delete(product)
     db.session.commit()
@@ -167,220 +148,62 @@ def delete_product(product_id):
 @main_bp.route('/products/import', methods=['GET', 'POST'])
 @admin_required
 def import_products():
-    """
-    Importa produtos de um arquivo Excel ou CSV.
-    Apenas administradores podem acessar.
-    """
     form = ProductImportForm()
     imported_products_data = []
-
     if form.validate_on_submit():
         file = form.file.data
         if file:
             try:
-                # Determina o tipo de arquivo e lê com pandas
                 if file.filename.endswith('.xlsx'):
                     df = pd.read_excel(file)
                 elif file.filename.endswith('.csv'):
                     df = pd.read_csv(file)
                 else:
-                    flash('Formato de arquivo não suportado. Use .xlsx ou .csv', 'danger')
+                    flash('Formato não suportado.', 'danger')
                     return render_template('import_products.html', form=form, imported_products_data=[])
 
-                # Mapeamento de colunas (ajuste conforme os cabeçalhos do seu arquivo)
                 column_mapping = {
-                    'Nome do Produto': 'name',
-                    'Nome': 'name',
-                    'Descrição': 'description',
-                    'Preço de Venda': 'price',
-                    'Preço': 'price',
-                    'Estoque Atual': 'stock',
-                    'Estoque': 'stock',
-                    'Código de Barras': 'barcode',
-                    'Código': 'barcode',
-                    'Alerta Retorno (dias)': 'return_alert_days',
-                    'Alerta Retorno': 'return_alert_days',
-                    'return_alert_days': 'return_alert_days' # Para compatibilidade direta
+                    'Nome': 'name', 'Preço': 'price', 'Estoque': 'stock', 'Código': 'barcode'
                 }
-
-                # Renomeia as colunas do DataFrame para corresponder aos nomes do modelo
                 df.rename(columns=column_mapping, inplace=True)
 
-                # Converte o DataFrame para uma lista de dicionários
-                # Garante que apenas as colunas relevantes para o ProductForm sejam incluídas
                 for index, row in df.iterrows():
                     product_data = {
                         'name': row.get('name'),
-                        'description': row.get('description'),
                         'price': row.get('price'),
                         'stock': row.get('stock'),
-                        'barcode': row.get('barcode'),
-                        'return_alert_days': row.get('return_alert_days')
+                        'barcode': row.get('barcode') or f"IMP-{int(time.time())}-{index}"
                     }
-                    # Filtra None values para campos que podem não existir no Excel
-                    imported_products_data.append({k: v for k, v in product_data.items() if v is not None})
+                    imported_products_data.append(product_data)
 
-                # Se a requisição for AJAX para pré-visualização
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                     return jsonify({'success': True, 'products': imported_products_data})
-
             except Exception as e:
-                flash(f'Erro ao processar o arquivo: {str(e)}', 'danger')
-                current_app.logger.error(f"Erro na importação de produtos: {e}")
-
-    # Se a requisição for POST para salvar os produtos
-    if request.method == 'POST' and not form.file.data: # Verifica se não é um upload de arquivo, mas sim o envio dos dados da tabela
-        products_to_save = request.get_json().get('products', [])
-        if products_to_save:
-            try:
-                for p_data in products_to_save:
-                    # Tenta encontrar um produto existente pelo código de barras
-                    existing_product = Product.query.filter_by(barcode=p_data.get('barcode')).first()
-
-                    if existing_product:
-                        # Atualiza o produto existente
-                        existing_product.name = p_data.get('name', existing_product.name)
-                        existing_product.description = p_data.get('description', existing_product.description)
-                        existing_product.price = p_data.get('price', existing_product.price)
-                        existing_product.stock = p_data.get('stock', existing_product.stock)
-                        existing_product.return_alert_days = p_data.get('return_alert_days', existing_product.return_alert_days)
-                    else:
-                        # Cria um novo produto
-                        new_product = Product(
-                            name=p_data.get('name'),
-                            description=p_data.get('description'),
-                            price=p_data.get('price'),
-                            stock=p_data.get('stock'),
-                            barcode=p_data.get('barcode'),
-                            return_alert_days=p_data.get('return_alert_days')
-                        )
-                        db.session.add(new_product)
-                db.session.commit()
-                flash('Produtos importados e/ou atualizados com sucesso!', 'success')
-                return jsonify({'success': True, 'message': 'Produtos importados com sucesso!'})
-            except Exception as e:
-                db.session.rollback()
-                flash(f'Erro ao salvar produtos: {str(e)}', 'danger')
-                current_app.logger.error(f"Erro ao salvar produtos importados: {e}")
-                return jsonify({'success': False, 'message': f'Erro ao salvar produtos: {str(e)}'}), 500
-        else:
-            flash('Nenhum produto para salvar.', 'warning')
-            return jsonify({'success': False, 'message': 'Nenhum produto para salvar.'}), 400
+                flash(f'Erro: {str(e)}', 'danger')
 
     return render_template('import_products.html', form=form, imported_products_data=imported_products_data)
 
-# --- Rotas de Gerenciamento de Usuários (Admin Apenas) ---
-
-@main_bp.route('/users')
-@admin_required
-def users():
-    """
-    Lista todos os usuários cadastrados no sistema.
-    Apenas administradores podem acessar.
-    """
-    users = User.query.all()
-    return render_template('users.html', users=users)
-
-@main_bp.route('/user/add', methods=['GET', 'POST'])
-@admin_required
-def add_user():
-    """
-    Adiciona um novo usuário ao sistema.
-    Apenas administradores podem acessar.
-    """
-    form = UserForm()
-    if form.validate_on_submit():
-        hashed_password = generate_password_hash(form.password.data, method='pbkdf2:sha256')
-        new_user = User(
-            username=form.username.data,
-            password_hash=hashed_password,
-            is_admin=form.is_admin.data
-        )
-        db.session.add(new_user)
-        db.session.commit()
-        flash('Usuário adicionado com sucesso!', 'success')
-        return redirect(url_for('main.users'))
-    return render_template('add_edit_user.html', title='Adicionar Usuário', form=form)
-
-@main_bp.route('/user/edit/<int:user_id>', methods=['GET', 'POST'])
-@admin_required
-def edit_user(user_id):
-    """
-    Edita um usuário existente no sistema.
-    Apenas administradores podem acessar.
-    """
-    user = User.query.get_or_404(user_id)
-    form = UserForm(obj=user)
-    if form.validate_on_submit():
-        user.username = form.username.data
-        user.is_admin = form.is_admin.data
-        if form.password.data: # Apenas atualiza a senha se um novo valor for fornecido
-            user.password_hash = generate_password_hash(form.password.data, method='pbkdf2:sha256')
-        db.session.commit()
-        flash('Usuário atualizado com sucesso!', 'success')
-        return redirect(url_for('main.users'))
-    return render_template('add_edit_user.html', title='Editar Usuário', form=form)
-
-@main_bp.route('/user/delete/<int:user_id>', methods=['POST'])
-@admin_required
-def delete_user(user_id):
-    """
-    Exclui um usuário do sistema.
-    Apenas administradores podem acessar.
-    """
-    user = User.query.get_or_404(user_id)
-    db.session.delete(user)
-    db.session.commit()
-    flash('Usuário excluído com sucesso!', 'success')
-    return redirect(url_for('main.users'))
-
-# --- Rotas do PDV (Ponto de Venda) ---
+# --- Rotas do PDV ---
 
 @main_bp.route('/pdv')
 @login_required
 def pdv():
-    """
-    Página principal do Ponto de Venda.
-    Acessível por qualquer usuário logado.
-    """
     return render_template('pdv.html')
 
 @main_bp.route('/pdv/search_product', methods=['GET'])
 @login_required
 def pdv_search_product():
-    """
-    Endpoint para buscar produtos por nome ou código de barras para o PDV.
-    Retorna uma lista de produtos em formato JSON.
-    """
     query = request.args.get('query', '').strip()
     if not query:
         return jsonify([])
-
-    # Busca por nome (case-insensitive) ou código de barras exato
-    products = Product.query.filter(
-        or_(
-            Product.name.ilike(f'%{query}%'),
-            Product.barcode == query
-        )
-    ).limit(10).all() # Limita o número de resultados para melhor performance
-
-    products_data = [{
-        'id': p.id,
-        'name': p.name,
-        'price': float(p.price), # Garante que seja float para JSON
-        'stock': p.stock,
-        'barcode': p.barcode
-    } for p in products]
-
-    return jsonify(products_data)
+    products = Product.query.filter(or_(Product.name.ilike(f'%{query}%'), Product.barcode == query)).limit(10).all()
+    return jsonify([{'id': p.id, 'name': p.name, 'price': float(p.price), 'stock': p.stock, 'barcode': p.barcode} for p in products])
 
 @main_bp.route('/pdv/checkout', methods=['POST'])
 @login_required
 def pdv_checkout():
     """
-    Processa o checkout de uma venda no PDV.
-    Cria uma nova venda e atualiza o estoque dos produtos.
-    Gera um cupom HTML para CADA UNIDADE de produto vendida.
+    Processa o checkout e gera o cupom com as 5 regras de personalização.
     """
     data = request.get_json()
     cart_items = data.get('cart', [])
@@ -393,148 +216,127 @@ def pdv_checkout():
         return jsonify({'success': False, 'message': 'Carrinho vazio.'}), 400
 
     try:
-        new_sale = Sale(
-            user_id=current_user.id,
-            total_amount=total_amount,
-            payment_method=payment_method,
-            paid_amount=paid_amount,
-            change_amount=change_amount
-        )
+        new_sale = Sale(user_id=current_user.id, total_amount=total_amount, payment_method=payment_method, paid_amount=paid_amount, change_amount=change_amount)
         db.session.add(new_sale)
-        db.session.flush() # Para obter o ID da venda antes do commit
+        db.session.flush()
 
-        all_receipt_htmls = [] # Lista para armazenar todos os HTMLs de cupom
-        receipt_counter = 0 # Contador para o número do cupom
+        all_receipt_htmls = []
+        receipt_counter = 0
 
         for item_data in cart_items:
-            product_id = item_data['id']
-            quantity_sold_in_item = item_data['quantity'] # Quantidade deste item no carrinho
-            product_name = item_data['name']
-            price_at_sale = item_data['price']
-
-            product = Product.query.get(product_id)
-            if not product or product.stock < quantity_sold_in_item:
+            product = Product.query.get(item_data['id'])
+            if not product or product.stock < item_data['quantity']:
                 db.session.rollback()
-                return jsonify({'success': False, 'message': f'Estoque insuficiente para {product_name}.'}), 400
+                return jsonify({'success': False, 'message': f'Estoque insuficiente para {item_data["name"]}.'}), 400
 
-            # Cria um SaleItem para a quantidade total do item no carrinho
-            sale_item = SaleItem(
-                sale_id=new_sale.id,
-                product_id=product_id,
-                quantity=quantity_sold_in_item,
-                price_at_sale=price_at_sale
-            )
+            sale_item = SaleItem(sale_id=new_sale.id, product_id=product.id, quantity=item_data['quantity'], price_at_sale=item_data['price'])
             db.session.add(sale_item)
+            product.stock -= item_data['quantity']
 
-            product.stock -= quantity_sold_in_item # Atualiza o estoque
-            db.session.add(product)
-
-            # --- GERA UM CUPOM PARA CADA UNIDADE VENDIDA DESTE ITEM ---
-            for i in range(quantity_sold_in_item):
+            # GERAÇÃO DO CUPOM PERSONALIZADO
+            for i in range(item_data['quantity']):
                 receipt_counter += 1
                 receipt_html = f"""
-                <div class="receipt-container">
+                <div class="receipt-container" style="font-weight: bold; margin-bottom: 60px; font-family: Courier, monospace; text-align: center;">
                     <div class="receipt-header">
-                        <p><strong>PDV Flask</strong></p>
-                        <p>Cupom Não Fiscal - Venda #{new_sale.id}</p>
+                        <p style="font-size: 1.4em; margin: 5px 0;">HOUSEHOT SWING CLUB</p>
+                        <p style="margin: 2px 0;">VENDA: #{new_sale.id}</p>
+                        <hr style="border-top: 1px dashed #000;">
+                        <p>Cupom Não Fiscal</p>
                         <p>Item {receipt_counter} de {sum(item['quantity'] for item in cart_items)}</p>
-                        <p>Data: {new_sale.timestamp.strftime('%d/%m/%Y %H:%M:%S')}</p>
-                        <p>Operador: {current_user.username}</p>
-                        <hr>
+                        <p>{new_sale.timestamp.strftime('%d/%m/%Y %H:%M:%S')}</p>
+                        <hr style="border-top: 1px dashed #000;">
                     </div>
                     <div class="receipt-body">
-                        <p><strong>ITEM:</strong></p>
-                        <p><span class="product-name-highlight">{product_name}</span></p>
-                        <p>1 UN x R$ {price_at_sale:.2f} = R$ {price_at_sale:.2f}</p>
-                        <hr>
-                        <p><strong>TOTAL DESTE CUPOM: R$ {price_at_sale:.2f}</strong></p>
+                        <p>PRODUTO:</p>
+                        <p style="font-size: 1.5em; border: 2px solid #000; padding: 8px; margin: 10px 0; display: inline-block; text-transform: uppercase;">{item_data['name']}</p>
+                        <p>1 UN x R$ {item_data['price']:.2f}</p>
+                        <hr style="border-top: 1px dashed #000;">
+                        <p style="font-size: 1.2em;">TOTAL: R$ {item_data['price']:.2f}</p>
                         <p>Pagamento: {payment_method}</p>
-                        <p>Valor Pago: R$ {paid_amount:.2f}</p>
-                        <p>Troco: R$ {change_amount:.2f}</p>
                     </div>
                     <div class="receipt-footer">
-                        <hr>
+                        <hr style="border-top: 1px dashed #000;">
                         <p>Obrigado pela preferência!</p>
+                        <div style="height: 30px;"></div>
                     </div>
                 </div>
                 """
                 all_receipt_htmls.append(receipt_html)
 
         db.session.commit()
-
-        return jsonify({'success': True, 'message': 'Venda finalizada com sucesso!', 'receipt_htmls': all_receipt_htmls}), 200
-
+        return jsonify({'success': True, 'message': 'Venda realizada!', 'receipt_htmls': all_receipt_htmls}), 200
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Erro no checkout: {e}")
-        return jsonify({'success': False, 'message': f'Erro ao finalizar venda: {str(e)}'}), 500
+        return jsonify({'success': False, 'message': str(e)}), 500
 
-# --- Rotas de Relatórios (Admin Apenas) ---
+# --- Rotas de Gerenciamento de Usuários ---
+
+@main_bp.route('/users')
+@admin_required
+def users():
+    users = User.query.all()
+    return render_template('users.html', users=users)
+
+@main_bp.route('/user/add', methods=['GET', 'POST'])
+@admin_required
+def add_user():
+    form = UserForm()
+    if form.validate_on_submit():
+        hashed_password = generate_password_hash(form.password.data, method='pbkdf2:sha256')
+        new_user = User(username=form.username.data, password_hash=hashed_password, is_admin=form.is_admin.data)
+        db.session.add(new_user)
+        db.session.commit()
+        flash('Usuário adicionado!', 'success')
+        return redirect(url_for('main.users'))
+    return render_template('add_edit_user.html', title='Adicionar Usuário', form=form)
+
+@main_bp.route('/user/edit/<int:user_id>', methods=['GET', 'POST'])
+@admin_required
+def edit_user(user_id):
+    user = User.query.get_or_404(user_id)
+    form = UserForm(obj=user)
+    if form.validate_on_submit():
+        user.username = form.username.data
+        user.is_admin = form.is_admin.data
+        if form.password.data:
+            user.password_hash = generate_password_hash(form.password.data, method='pbkdf2:sha256')
+        db.session.commit()
+        flash('Usuário atualizado!', 'success')
+        return redirect(url_for('main.users'))
+    return render_template('add_edit_user.html', title='Editar Usuário', form=form)
+
+@main_bp.route('/user/delete/<int:user_id>', methods=['POST'])
+@admin_required
+def delete_user(user_id):
+    user = User.query.get_or_404(user_id)
+    db.session.delete(user)
+    db.session.commit()
+    flash('Usuário removido!', 'success')
+    return redirect(url_for('main.users'))
+
+# --- Relatórios ---
 
 @main_bp.route('/reports')
 @admin_required
 def reports():
-    """
-    Página principal de relatórios.
-    Apenas administradores podem acessar.
-    """
     return render_template('reports.html')
 
-@main_bp.route('/reports/sales_by_period', methods=['GET'])
+@main_bp.route('/reports/sales_by_period')
 @admin_required
 def sales_by_period_report():
-    """
-    Gera um relatório de vendas por período.
-    """
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
-
     sales_query = Sale.query
-
     if start_date_str:
-        start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-        sales_query = sales_query.filter(Sale.timestamp >= start_date)
+        sales_query = sales_query.filter(Sale.timestamp >= datetime.strptime(start_date_str, '%Y-%m-%d'))
     if end_date_str:
-        end_date = datetime.strptime(end_date_str, '%Y-%m-%d') + timedelta(days=1) # Inclui o dia inteiro
-        sales_query = sales_query.filter(Sale.timestamp < end_date)
-
+        sales_query = sales_query.filter(Sale.timestamp < datetime.strptime(end_date_str, '%Y-%m-%d') + timedelta(days=1))
     sales = sales_query.order_by(Sale.timestamp.desc()).all()
+    return render_template('reports_sales_by_period.html', sales=sales, total_sales_count=len(sales), total_revenue=sum(s.total_amount for s in sales), start_date=start_date_str, end_date=end_date_str)
 
-    total_sales_count = len(sales)
-    total_revenue = sum(sale.total_amount for sale in sales)
-
-    return render_template('reports_sales_by_period.html',
-                           sales=sales,
-                           total_sales_count=total_sales_count,
-                           total_revenue=total_revenue,
-                           start_date=start_date_str,
-                           end_date=end_date_str)
-
-@main_bp.route('/reports/top_products', methods=['GET'])
+@main_bp.route('/reports/top_products')
 @admin_required
 def top_products_report():
-    """
-    Gera um relatório dos produtos mais vendidos.
-    """
-    # Consulta para somar a quantidade vendida de cada produto
-    top_products = db.session.query(
-        Product.name,
-        func.sum(SaleItem.quantity).label('total_quantity_sold'),
-        func.sum(SaleItem.quantity * SaleItem.price_at_sale).label('total_revenue_generated')
-    ).join(SaleItem).group_by(Product.name).order_by(func.sum(SaleItem.quantity).desc()).limit(10).all()
-
+    top_products = db.session.query(Product.name, func.sum(SaleItem.quantity).label('total')).join(SaleItem).group_by(Product.name).order_by(func.sum(SaleItem.quantity).desc()).limit(10).all()
     return render_template('reports_top_products.html', top_products=top_products)
-
-@main_bp.route('/reports/sales_by_user', methods=['GET'])
-@admin_required
-def sales_by_user_report():
-    """
-    Gera um relatório de vendas por usuário (operador).
-    """
-    sales_by_user = db.session.query(
-        User.username,
-        func.count(Sale.id).label('total_sales_count'),
-        func.sum(Sale.total_amount).label('total_revenue')
-    ).join(Sale).group_by(User.username).order_by(func.sum(Sale.total_amount).desc()).all()
-
-    return render_template('reports_sales_by_user.html', sales_by_user=sales_by_user)

@@ -24,10 +24,10 @@
         const printReceiptModal = new bootstrap.Modal(printReceiptModalElement);
         const receiptContent = document.getElementById('receipt-content');
         const printBtn = document.getElementById('print-btn');
-        const printAllBtn = document.getElementById('print-all-btn'); // Novo botão para imprimir todos
+        const printAllBtn = document.getElementById('print-all-btn'); // Novo botão
 
         let cart = [];
-        let currentReceiptsToPrint = []; // Armazena a lista de HTMLs de cupom para impressão
+        let currentReceiptsToPrint = []; // Armazena a lista de HTMLs de cupons
 
         // Função debounce para limitar a frequência de chamadas de função
         function debounce(func, delay) {
@@ -77,7 +77,7 @@
             } else {
                 searchResults.style.display = 'none';
             }
-        }, 300));
+        }, 300)); // Debounce para evitar muitas requisições
 
         // Função para adicionar produto ao carrinho
         function addProductToCart(event) {
@@ -101,22 +101,15 @@
                         name: productName,
                         price: productPrice,
                         quantity: 1,
-                        stock: productStock // Manter o estoque original para validação
+                        stock: productStock // Mantém o estoque original para referência
                     });
                 } else {
-                    alert(`Produto ${productName} sem estoque.`);
+                    alert(`Produto ${productName} está fora de estoque.`);
                 }
             }
             updateCartDisplay();
             searchResults.style.display = 'none'; // Esconde os resultados após adicionar
             searchInput.value = ''; // Limpa o campo de busca
-        }
-
-        // Função para remover item do carrinho
-        function removeItemFromCart(event) {
-            const productId = parseInt(event.target.dataset.id);
-            cart = cart.filter(item => item.id !== productId);
-            updateCartDisplay();
         }
 
         // Função para atualizar a exibição do carrinho
@@ -126,70 +119,69 @@
 
             if (cart.length === 0) {
                 cartItemsContainer.innerHTML = '<li class="list-group-item text-center text-muted">Carrinho vazio</li>';
-                cartTotalElement.textContent = '0.00';
                 checkoutBtn.disabled = true;
                 clearCartBtn.disabled = true;
-                return;
+            } else {
+                cart.forEach(item => {
+                    const li = document.createElement('li');
+                    li.classList.add('list-group-item', 'd-flex', 'justify-content-between', 'align-items-center');
+                    li.innerHTML = `
+                        <div>
+                            ${item.name} <br>
+                            <small>R$ ${item.price.toFixed(2)} x ${item.quantity}</small>
+                        </div>
+                        <div>
+                            R$ ${(item.price * item.quantity).toFixed(2)}
+                            <button class="btn btn-sm btn-outline-secondary ms-2 decrease-quantity" data-id="${item.id}">-</button>
+                            <button class="btn btn-sm btn-outline-secondary increase-quantity" data-id="${item.id}">+</button>
+                            <button class="btn btn-sm btn-outline-danger ms-2 remove-item" data-id="${item.id}">x</button>
+                        </div>
+                    `;
+                    cartItemsContainer.appendChild(li);
+                    total += item.price * item.quantity;
+                });
+                checkoutBtn.disabled = false;
+                clearCartBtn.disabled = false;
             }
-
-            cart.forEach(item => {
-                const li = document.createElement('li');
-                li.classList.add('list-group-item', 'd-flex', 'justify-content-between', 'align-items-center');
-                li.innerHTML = `
-                    <div>
-                        ${item.name} (R$ ${item.price.toFixed(2)})
-                        <br>
-                        <small>Estoque: ${item.stock}</small>
-                    </div>
-                    <div class="d-flex align-items-center">
-                        <button class="btn btn-sm btn-outline-secondary me-1" data-id="${item.id}" data-action="decrease">-</button>
-                        <span class="badge bg-primary rounded-pill me-1">${item.quantity}</span>
-                        <button class="btn btn-sm btn-outline-secondary me-1" data-id="${item.id}" data-action="increase">+</button>
-                        <button class="btn btn-sm btn-outline-danger" data-id="${item.id}" data-action="remove">x</button>
-                    </div>
-                `;
-                cartItemsContainer.appendChild(li);
-                total += item.price * item.quantity;
-            });
-
             cartTotalElement.textContent = total.toFixed(2);
-            checkoutBtn.disabled = false;
-            clearCartBtn.disabled = false;
-            calculateChange(); // Recalcula o troco ao atualizar o carrinho
+            calculateChange();
         }
 
         // Event listeners para botões de quantidade e remoção no carrinho
         cartItemsContainer.addEventListener('click', function(event) {
             const target = event.target;
             const productId = parseInt(target.dataset.id);
-            const action = target.dataset.action;
+            const item = cart.find(i => i.id === productId);
 
-            if (action === 'increase') {
-                const item = cart.find(i => i.id === productId);
-                if (item && item.quantity < item.stock) {
+            if (!item) return;
+
+            if (target.classList.contains('increase-quantity')) {
+                if (item.quantity < item.stock) {
                     item.quantity++;
-                } else if (item) {
+                } else {
                     alert(`Estoque máximo (${item.stock}) atingido para ${item.name}.`);
                 }
-            } else if (action === 'decrease') {
-                const item = cart.find(i => i.id === productId);
-                if (item && item.quantity > 1) {
+            } else if (target.classList.contains('decrease-quantity')) {
+                if (item.quantity > 1) {
                     item.quantity--;
-                } else if (item) {
-                    removeItemFromCart(event); // Remove se a quantidade chegar a 0
+                } else {
+                    // Se a quantidade for 1 e o usuário tentar diminuir, remove o item
+                    cart = cart.filter(i => i.id !== productId);
                 }
-            } else if (action === 'remove') {
-                removeItemFromCart(event);
+            } else if (target.classList.contains('remove-item')) {
+                cart = cart.filter(i => i.id !== productId);
             }
             updateCartDisplay();
         });
 
         // Limpar carrinho
         clearCartBtn.addEventListener('click', function() {
-            cart = [];
-            updateCartDisplay();
-            paidAmountInput.value = '0.00';
-            calculateChange();
+            if (confirm('Tem certeza que deseja limpar o carrinho?')) {
+                cart = [];
+                updateCartDisplay();
+                paidAmountInput.value = '0.00';
+                calculateChange();
+            }
         });
 
         // Calcular troco
@@ -200,25 +192,21 @@
             const total = parseFloat(cartTotalElement.textContent);
             const paid = parseFloat(paidAmountInput.value) || 0;
             const paymentMethod = paymentMethodSelect.value;
-
             let change = paid - total;
-            changeAmountElement.textContent = `R$ ${change.toFixed(2)}`;
 
-            if (change >= 0) {
-                changeAmountElement.classList.remove('text-danger');
-                changeAmountElement.classList.add('text-success');
-                checkoutBtn.disabled = cart.length === 0; // Habilita se houver itens e troco suficiente
+            if (paymentMethod !== 'Dinheiro') {
+                paidAmountInput.value = total.toFixed(2); // Em cartão/pix, o valor pago é o total
+                change = 0;
+                paidAmountInput.disabled = true;
             } else {
-                changeAmountElement.classList.remove('text-success');
-                changeAmountElement.classList.add('text-danger');
-                checkoutBtn.disabled = true; // Desabilita se o valor pago for insuficiente
+                paidAmountInput.disabled = false;
             }
 
-            // Se o método de pagamento não for dinheiro, não exige valor pago exato
-            if (paymentMethod !== 'Dinheiro') {
-                checkoutBtn.disabled = cart.length === 0; // Habilita se houver itens
-                paidAmountInput.value = total.toFixed(2); // Preenche o valor pago com o total
-                changeAmountElement.textContent = 'R$ 0.00';
+            changeAmountElement.textContent = `R$ ${change.toFixed(2)}`;
+            if (change < 0) {
+                changeAmountElement.classList.remove('text-success');
+                changeAmountElement.classList.add('text-danger');
+            } else {
                 changeAmountElement.classList.remove('text-danger');
                 changeAmountElement.classList.add('text-success');
             }
@@ -306,9 +294,22 @@
                 .receipt-body p, .receipt-footer p { margin: 2px 0; }
                 .product-name-highlight { font-weight: bold; }
                 hr { border-top: 1px dashed #888; margin: 5px 0; }
+                /* Estilo para o espaçamento entre cupons */
+                .page-break-after {
+                    page-break-after: always; /* Força quebra de página na impressão */
+                    margin-top: 20mm; /* Espaço físico entre os cupons */
+                    border-bottom: 1px dashed #ccc; /* Linha tracejada para corte */
+                    padding-bottom: 20mm; /* Espaço abaixo da linha */
+                }
                 @media print {
                     body { margin: 0; padding: 0; }
                     .receipt-container { border: none; }
+                    .page-break-after {
+                        page-break-after: always;
+                        margin-top: 20mm; /* Garante o espaçamento na impressão */
+                        border-bottom: 1px dashed #ccc;
+                        padding-bottom: 20mm;
+                    }
                 }
             `);
             printWindow.document.write('</style></head><body>');
