@@ -9,9 +9,10 @@ from functools import wraps
 import pandas as pd
 import io
 from sqlalchemy import or_, func
+from werkzeug.security import generate_password_hash # Importar para setar senha de admin inicial
 
-# Importar a classe User aqui
-from models import User, Product, Sale, SaleItem # Importe todos os modelos que são usados globalmente ou em várias funções
+# Importar as classes de modelo aqui
+from models import User, Product, Sale, SaleItem
 
 main_bp = Blueprint('main', __name__)
 
@@ -112,12 +113,20 @@ def add_product():
     """
     form = ProductForm()
     if form.validate_on_submit():
-        product = Product(name=form.name.data,
-                          description=form.description.data,
-                          price=form.price.data,
-                          stock=form.stock.data,
-                          barcode=form.barcode.data)
-        db.session.add(product)
+        new_product = Product(
+            name=form.name.data,
+            description=form.description.data,
+            price=form.price.data,
+            stock=form.stock.data,
+            barcode=form.barcode.data
+        )
+        # Atribui o campo opcional, garantindo que seja None se vazio
+        if form.return_alert_days.data is not None and form.return_alert_days.data != '':
+            new_product.return_alert_days = form.return_alert_days.data
+        else:
+            new_product.return_alert_days = None
+
+        db.session.add(new_product)
         db.session.commit()
         flash('Produto adicionado com sucesso!', 'success')
         return redirect(url_for('main.products'))
@@ -127,14 +136,16 @@ def add_product():
 @admin_required
 def edit_product(product_id):
     """
-    Edita um produto existente.
+    Edita um produto existente no sistema.
     Apenas administradores podem acessar.
     """
     product = Product.query.get_or_404(product_id)
     form = ProductForm(obj=product) # Preenche o formulário com os dados do produto
-
     if form.validate_on_submit():
         form.populate_obj(product) # Atualiza o objeto produto com os dados do formulário
+        # Garante que o campo opcional seja None se vazio
+        if form.return_alert_days.data is not None and form.return_alert_days.data == '':
+            product.return_alert_days = None
         db.session.commit()
         flash('Produto atualizado com sucesso!', 'success')
         return redirect(url_for('main.products'))
@@ -144,20 +155,119 @@ def edit_product(product_id):
 @admin_required
 def delete_product(product_id):
     """
-    Exclui um produto.
+    Exclui um produto do sistema.
     Apenas administradores podem acessar.
     """
     product = Product.query.get_or_404(product_id)
-
-    # Verifica se o produto está em alguma venda
-    if SaleItem.query.filter_by(product_id=product.id).first():
-        flash('Não é possível excluir o produto, pois ele está associado a vendas existentes.', 'danger')
-        return redirect(url_for('main.products'))
-
     db.session.delete(product)
     db.session.commit()
     flash('Produto excluído com sucesso!', 'success')
     return redirect(url_for('main.products'))
+
+@main_bp.route('/products/import', methods=['GET', 'POST'])
+@admin_required
+def import_products():
+    """
+    Importa produtos de um arquivo Excel ou CSV.
+    Apenas administradores podem acessar.
+    """
+    form = ProductImportForm()
+    imported_products_data = []
+
+    if form.validate_on_submit():
+        file = form.file.data
+        if file:
+            try:
+                # Determina o tipo de arquivo e lê com pandas
+                if file.filename.endswith('.xlsx'):
+                    df = pd.read_excel(file)
+                elif file.filename.endswith('.csv'):
+                    df = pd.read_csv(file)
+                else:
+                    flash('Formato de arquivo não suportado. Use .xlsx ou .csv', 'danger')
+                    return render_template('import_products.html', form=form, imported_products_data=[])
+
+                # Mapeamento de colunas (ajuste conforme os cabeçalhos do seu arquivo)
+                column_mapping = {
+                    'Nome do Produto': 'name',
+                    'Nome': 'name',
+                    'Descrição': 'description',
+                    'Preço de Venda': 'price',
+                    'Preço': 'price',
+                    'Estoque Atual': 'stock',
+                    'Estoque': 'stock',
+                    'Código de Barras': 'barcode',
+                    'Código': 'barcode',
+                    'Alerta Retorno (dias)': 'return_alert_days',
+                    'Alerta Retorno': 'return_alert_days',
+                    'return_alert_days': 'return_alert_days' # Para compatibilidade direta
+                }
+
+                # Renomeia as colunas do DataFrame para corresponder aos nomes do modelo
+                df.rename(columns=column_mapping, inplace=True)
+
+                # Converte o DataFrame para uma lista de dicionários
+                # Garante que apenas as colunas relevantes para o ProductForm sejam incluídas
+                for index, row in df.iterrows():
+                    product_data = {
+                        'name': row.get('name'),
+                        'description': row.get('description'),
+                        'price': row.get('price'),
+                        'stock': row.get('stock'),
+                        'barcode': row.get('barcode'),
+                        'return_alert_days': row.get('return_alert_days')
+                    }
+                    # Filtra None values para campos que podem não existir no Excel
+                    imported_products_data.append({k: v for k, v in product_data.items() if v is not None})
+
+                # Se a requisição for AJAX para pré-visualização
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return jsonify({'success': True, 'products': imported_products_data})
+
+            except Exception as e:
+                flash(f'Erro ao processar o arquivo: {str(e)}', 'danger')
+                current_app.logger.error(f"Erro na importação de produtos: {e}")
+
+    # Se a requisição for POST para salvar os produtos
+    if request.method == 'POST' and not form.file.data: # Verifica se não é um upload de arquivo, mas sim o envio dos dados da tabela
+        products_to_save = request.get_json().get('products', [])
+        if products_to_save:
+            try:
+                for p_data in products_to_save:
+                    # Tenta encontrar um produto existente pelo código de barras
+                    existing_product = Product.query.filter_by(barcode=p_data.get('barcode')).first()
+
+                    if existing_product:
+                        # Atualiza o produto existente
+                        existing_product.name = p_data.get('name', existing_product.name)
+                        existing_product.description = p_data.get('description', existing_product.description)
+                        existing_product.price = p_data.get('price', existing_product.price)
+                        existing_product.stock = p_data.get('stock', existing_product.stock)
+                        existing_product.return_alert_days = p_data.get('return_alert_days', existing_product.return_alert_days)
+                    else:
+                        # Cria um novo produto
+                        new_product = Product(
+                            name=p_data.get('name'),
+                            description=p_data.get('description'),
+                            price=p_data.get('price'),
+                            stock=p_data.get('stock'),
+                            barcode=p_data.get('barcode'),
+                            return_alert_days=p_data.get('return_alert_days')
+                        )
+                        db.session.add(new_product)
+                db.session.commit()
+                flash('Produtos importados e/ou atualizados com sucesso!', 'success')
+                return jsonify({'success': True, 'message': 'Produtos importados com sucesso!'})
+            except Exception as e:
+                db.session.rollback()
+                flash(f'Erro ao salvar produtos: {str(e)}', 'danger')
+                current_app.logger.error(f"Erro ao salvar produtos importados: {e}")
+                return jsonify({'success': False, 'message': f'Erro ao salvar produtos: {str(e)}'}), 500
+        else:
+            flash('Nenhum produto para salvar.', 'warning')
+            return jsonify({'success': False, 'message': 'Nenhum produto para salvar.'}), 400
+
+    return render_template('import_products.html', form=form, imported_products_data=imported_products_data)
 
 # --- Rotas de Gerenciamento de Usuários (Admin Apenas) ---
 
@@ -180,9 +290,13 @@ def add_user():
     """
     form = UserForm()
     if form.validate_on_submit():
-        user = User(username=form.username.data, email=form.email.data, role=form.role.data)
-        user.set_password(form.password.data) # Define a senha com hash
-        db.session.add(user)
+        hashed_password = generate_password_hash(form.password.data, method='pbkdf2:sha256')
+        new_user = User(
+            username=form.username.data,
+            password_hash=hashed_password,
+            is_admin=form.is_admin.data
+        )
+        db.session.add(new_user)
         db.session.commit()
         flash('Usuário adicionado com sucesso!', 'success')
         return redirect(url_for('main.users'))
@@ -192,153 +306,95 @@ def add_user():
 @admin_required
 def edit_user(user_id):
     """
-    Edita um usuário existente.
+    Edita um usuário existente no sistema.
     Apenas administradores podem acessar.
     """
     user = User.query.get_or_404(user_id)
-    form = UserForm(obj=user) # Preenche o formulário com os dados do usuário
-
-    # Remove o campo de senha se não for necessário alterar
-    # ou se for um campo opcional para edição
-    del form.password # Remove o campo de senha para edição, pois não queremos sobrescrever o hash sem querer
-    del form.confirm_password # Remove o campo de confirmação de senha
-
+    form = UserForm(obj=user)
     if form.validate_on_submit():
-        # Atualiza apenas os campos que foram submetidos e validados
         user.username = form.username.data
-        user.email = form.email.data
-        user.role = form.role.data
-
-        # Se houver um campo de senha no formulário e ele for preenchido, atualiza a senha
-        # (Neste caso, removemos, então esta parte não será executada, mas é um exemplo)
-        # if 'password' in request.form and request.form['password']:
-        #     user.set_password(request.form['password'])
-
+        user.is_admin = form.is_admin.data
+        if form.password.data: # Apenas atualiza a senha se um novo valor for fornecido
+            user.password_hash = generate_password_hash(form.password.data, method='pbkdf2:sha256')
         db.session.commit()
         flash('Usuário atualizado com sucesso!', 'success')
         return redirect(url_for('main.users'))
-
-    # Preenche o formulário com os dados do usuário para exibição
-    form.username.data = user.username
-    form.email.data = user.email
-    form.role.data = user.role
-
-    return render_template('add_edit_user.html', title='Editar Usuário', form=form, user_id=user.id)
-
+    return render_template('add_edit_user.html', title='Editar Usuário', form=form)
 
 @main_bp.route('/user/delete/<int:user_id>', methods=['POST'])
 @admin_required
 def delete_user(user_id):
     """
-    Exclui um usuário.
+    Exclui um usuário do sistema.
     Apenas administradores podem acessar.
     """
     user = User.query.get_or_404(user_id)
-
-    # Não permitir que o próprio usuário logado se exclua
-    if user.id == current_user.id:
-        flash('Você não pode excluir seu próprio usuário.', 'danger')
-        return redirect(url_for('main.users'))
-
-    # Não permitir excluir o último administrador
-    if user.is_admin():
-        admin_count = User.query.filter_by(role='admin').count()
-        if admin_count <= 1:
-            flash('Não é possível excluir o último administrador do sistema.', 'danger')
-            return redirect(url_for('main.users'))
-
-    # Verifica se o usuário está associado a alguma venda
-    if Sale.query.filter_by(user_id=user.id).first():
-        flash('Não é possível excluir o usuário, pois ele está associado a vendas existentes.', 'danger')
-        return redirect(url_for('main.users'))
-
     db.session.delete(user)
     db.session.commit()
     flash('Usuário excluído com sucesso!', 'success')
     return redirect(url_for('main.users'))
 
-
-# --- Rotas do PDV ---
+# --- Rotas do PDV (Ponto de Venda) ---
 
 @main_bp.route('/pdv')
 @login_required
 def pdv():
     """
-    Página do Ponto de Venda.
-    Acessível por qualquer usuário autenticado.
+    Página principal do Ponto de Venda.
+    Acessível por qualquer usuário logado.
     """
     return render_template('pdv.html')
 
-@main_bp.route('/pdv/search_product')
+@main_bp.route('/pdv/search_product', methods=['GET'])
 @login_required
-def search_product():
+def pdv_search_product():
     """
-    Endpoint para buscar produtos por ID, nome ou código de barras.
+    Endpoint para buscar produtos por nome ou código de barras para o PDV.
     Retorna uma lista de produtos em formato JSON.
     """
     query = request.args.get('query', '').strip()
-    current_app.logger.debug(f"PDV Search: Recebida query '{query}'")
+    if not query:
+        return jsonify([])
 
-    products = []
-    if query:
-        # Tenta converter a query para int para buscar por ID
-        try:
-            product_id = int(query)
-            product = Product.query.get(product_id)
-            if product:
-                products.append(product)
-            current_app.logger.debug(f"PDV Search: Query '{query}' é um ID numérico. Encontrado {len(products)} produto(s).")
-        except ValueError:
-            current_app.logger.debug(f"PDV Search: Query '{query}' não é um ID numérico.")
-            # Se não for ID, busca por código de barras ou nome
-            search_pattern = f"%{query}%"
-            products = Product.query.filter(
-                or_(
-                    Product.barcode.ilike(query), # Busca exata por código de barras
-                    Product.name.ilike(search_pattern) # Busca parcial por nome
-                )
-            ).all()
-            current_app.logger.debug(f"PDV Search: Adicionada condição de busca por Código de Barras: '{query}'")
-            current_app.logger.debug(f"PDV Search: Adicionada condição de busca por Nome (ilike): '{search_pattern}'")
+    # Busca por nome (case-insensitive) ou código de barras exato
+    products = Product.query.filter(
+        or_(
+            Product.name.ilike(f'%{query}%'),
+            Product.barcode == query
+        )
+    ).limit(10).all() # Limita o número de resultados para melhor performance
 
-    current_app.logger.debug(f"PDV Search: Query SQL executada. Encontrados {len(products)} produto(s).")
-
-    # Converte os objetos Product para um formato JSON serializável
-    product_list = [{
+    products_data = [{
         'id': p.id,
         'name': p.name,
-        'description': p.description,
-        'price': float(p.price), # Converte Decimal para float
+        'price': float(p.price), # Garante que seja float para JSON
         'stock': p.stock,
         'barcode': p.barcode
     } for p in products]
 
-    current_app.logger.debug(f"PDV Search: Produtos encontrados para '{query}': {[p['name'] for p in product_list]}")
-    return jsonify(product_list)
-
+    return jsonify(products_data)
 
 @main_bp.route('/pdv/checkout', methods=['POST'])
 @login_required
-def checkout():
+def pdv_checkout():
     """
-    Finaliza uma venda, registrando-a no banco de dados e atualizando o estoque.
-    Gera um cupom individual para cada item vendido.
+    Processa o checkout de uma venda no PDV.
+    Cria uma nova venda e atualiza o estoque dos produtos.
+    Gera um cupom HTML para CADA UNIDADE de produto vendida.
     """
     data = request.get_json()
-    cart_items = data.get('cart')
+    cart_items = data.get('cart', [])
     payment_method = data.get('payment_method')
-    total_amount = data.get('total_amount')
-    paid_amount = data.get('paid_amount')
-    change_amount = data.get('change_amount')
+    paid_amount = float(data.get('paid_amount', 0))
+    change_amount = float(data.get('change_amount', 0))
+    total_amount = float(data.get('total_amount', 0))
 
     if not cart_items:
         return jsonify({'success': False, 'message': 'Carrinho vazio.'}), 400
 
     try:
-        # Cria a nova venda
         new_sale = Sale(
             user_id=current_user.id,
-            timestamp=datetime.utcnow(), # Garante que o timestamp é definido aqui
             total_amount=total_amount,
             payment_method=payment_method,
             paid_amount=paid_amount,
@@ -347,376 +403,138 @@ def checkout():
         db.session.add(new_sale)
         db.session.flush() # Para obter o ID da venda antes do commit
 
-        list_of_receipt_htmls = []
+        all_receipt_htmls = [] # Lista para armazenar todos os HTMLs de cupom
+        receipt_counter = 0 # Contador para o número do cupom
 
-        # Adiciona os itens da venda e atualiza o estoque
         for item_data in cart_items:
             product_id = item_data['id']
-            quantity = item_data['quantity']
+            quantity_sold_in_item = item_data['quantity'] # Quantidade deste item no carrinho
+            product_name = item_data['name']
+            price_at_sale = item_data['price']
 
-            # Bloqueio de linha para garantir integridade do estoque em concorrência
-            product = Product.query.with_for_update().get(product_id) 
-
-            if not product or product.stock < quantity:
+            product = Product.query.get(product_id)
+            if not product or product.stock < quantity_sold_in_item:
                 db.session.rollback()
-                return jsonify({'success': False, 'message': f'Estoque insuficiente para {item_data["name"]}.'}), 400
+                return jsonify({'success': False, 'message': f'Estoque insuficiente para {product_name}.'}), 400
 
-            product.stock -= quantity
-
+            # Cria um SaleItem para a quantidade total do item no carrinho
             sale_item = SaleItem(
                 sale_id=new_sale.id,
                 product_id=product_id,
-                quantity=quantity,
-                price_at_sale=item_data['price']
+                quantity=quantity_sold_in_item,
+                price_at_sale=price_at_sale
             )
             db.session.add(sale_item)
 
-            # --- Geração do HTML do cupom INDIVIDUAL para CADA ITEM ---
-            # Este loop será executado para cada item, gerando um HTML separado
-            for i in range(quantity): # Gera um cupom para cada unidade do item
+            product.stock -= quantity_sold_in_item # Atualiza o estoque
+            db.session.add(product)
+
+            # --- GERA UM CUPOM PARA CADA UNIDADE VENDIDA DESTE ITEM ---
+            for i in range(quantity_sold_in_item):
+                receipt_counter += 1
                 receipt_html = f"""
-                    <div style="text-align: center;">
-                        <p><strong>CUPOM NÃO FISCAL</strong></p>
-                        <p><strong>{current_app.config.get('COMPANY_NAME', 'PDV Flask')}</strong></p>
-                        <p><strong>CNPJ: {current_app.config.get('COMPANY_CNPJ', 'XX.XXX.XXX/XXXX-XX')}</strong></p>
-                        <p><strong>Endereço: {current_app.config.get('COMPANY_ADDRESS', 'Rua Exemplo, 123 - Cidade/UF')}</strong></p>
+                <div class="receipt-container">
+                    <div class="receipt-header">
+                        <p><strong>PDV Flask</strong></p>
+                        <p>Cupom Não Fiscal - Venda #{new_sale.id}</p>
+                        <p>Item {receipt_counter} de {sum(item['quantity'] for item in cart_items)}</p>
+                        <p>Data: {new_sale.timestamp.strftime('%d/%m/%Y %H:%M:%S')}</p>
+                        <p>Operador: {current_user.username}</p>
                         <hr>
-                        <p><strong>Data: {new_sale.timestamp.strftime('%d/%m/%Y %H:%M:%S')}</strong></p>
-                        <p><strong>Operador: {current_user.username}</strong></p>
-                        <hr>
-                        <p><strong>ITEM VENDIDO:</strong></p>
-                        <table style="width: 100%; border-collapse: collapse;">
-                            <thead>
-                                <tr>
-                                    <th style="text-align: left;">Produto</th>
-                                    <th style="text-align: right;">Preço Unit.</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td style="text-align: left;">{item_data['name']}</td>
-                                    <td style="text-align: right;">R$ {item_data['price']:.2f}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        <hr>
-                        <p style="text-align: right;"><strong>TOTAL DO ITEM: R$ {item_data['price']:.2f}</strong></p>
-                        <p style="text-align: right;"><strong>VENDA TOTAL: R$ {new_sale.total_amount:.2f}</strong></p>
-                        <p style="text-align: right;"><strong>PAGAMENTO: {new_sale.payment_method}</strong></p>
-                        <p style="text-align: right;"><strong>VALOR PAGO: R$ {new_sale.paid_amount:.2f}</strong></p>
-                        <p style="text-align: right;"><strong>TROCO: R$ {new_sale.change_amount:.2f}</strong></p>
-                        <hr>
-                        <p><strong>Obrigado e volte sempre!</strong></p>
                     </div>
+                    <div class="receipt-body">
+                        <p><strong>ITEM:</strong></p>
+                        <p><span class="product-name-highlight">{product_name}</span></p>
+                        <p>1 UN x R$ {price_at_sale:.2f} = R$ {price_at_sale:.2f}</p>
+                        <hr>
+                        <p><strong>TOTAL DESTE CUPOM: R$ {price_at_sale:.2f}</strong></p>
+                        <p>Pagamento: {payment_method}</p>
+                        <p>Valor Pago: R$ {paid_amount:.2f}</p>
+                        <p>Troco: R$ {change_amount:.2f}</p>
+                    </div>
+                    <div class="receipt-footer">
+                        <hr>
+                        <p>Obrigado pela preferência!</p>
+                    </div>
+                </div>
                 """
-                list_of_receipt_htmls.append(receipt_html)
+                all_receipt_htmls.append(receipt_html)
 
-        db.session.commit() # Confirma todas as alterações (venda, itens, estoque)
+        db.session.commit()
 
-        return jsonify({'success': True, 'message': 'Venda finalizada com sucesso!', 'receipt_htmls': list_of_receipt_htmls}), 200
+        return jsonify({'success': True, 'message': 'Venda finalizada com sucesso!', 'receipt_htmls': all_receipt_htmls}), 200
 
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Erro ao finalizar venda: {e}")
-        return jsonify({'success': False, 'message': f'Erro interno ao processar a venda: {str(e)}'}), 500
+        current_app.logger.error(f"Erro no checkout: {e}")
+        return jsonify({'success': False, 'message': f'Erro ao finalizar venda: {str(e)}'}), 500
 
 # --- Rotas de Relatórios (Admin Apenas) ---
+
 @main_bp.route('/reports')
 @admin_required
 def reports():
     """
-    Página de visão geral dos relatórios.
+    Página principal de relatórios.
     Apenas administradores podem acessar.
     """
     return render_template('reports.html')
 
-@main_bp.route('/reports/cash_flow')
+@main_bp.route('/reports/sales_by_period', methods=['GET'])
 @admin_required
-def cash_flow_report():
+def sales_by_period_report():
     """
-    Endpoint para gerar relatório de fluxo de caixa.
-    Apenas administradores podem acessar.
-    Filtra por data e calcula totais por método de pagamento.
+    Gera um relatório de vendas por período.
     """
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
 
-    query = Sale.query
+    sales_query = Sale.query
 
     if start_date_str:
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-        query = query.filter(Sale.timestamp >= start_date)
+        sales_query = sales_query.filter(Sale.timestamp >= start_date)
     if end_date_str:
-        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-        query = query.filter(Sale.timestamp <= end_date.replace(hour=23, minute=59, second=59))
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d') + timedelta(days=1) # Inclui o dia inteiro
+        sales_query = sales_query.filter(Sale.timestamp < end_date)
 
-    sales = query.all()
+    sales = sales_query.order_by(Sale.timestamp.desc()).all()
 
-    cash_sales = sum(s.total_amount for s in sales if s.payment_method == 'Dinheiro')
-    card_sales = sum(s.total_amount for s in sales if s.payment_method == 'Cartao')
-    pix_sales = sum(s.total_amount for s in sales if s.payment_method == 'Pix')
-    total_sales = sum(s.total_amount for s in sales)
+    total_sales_count = len(sales)
+    total_revenue = sum(sale.total_amount for sale in sales)
 
-    report_data = {
-        'cash_sales': float(cash_sales),
-        'card_sales': float(card_sales),
-        'pix_sales': float(pix_sales),
-        'total_sales': float(total_sales),
-        'sales_list': [{
-            'id': s.id,
-            'timestamp': s.timestamp.strftime('%d/%m/%Y %H:%M:%S'),
-            'total_amount': float(s.total_amount),
-            'payment_method': s.payment_method,
-            'operator': s.user.username,
-            'paid_amount': float(s.paid_amount) if s.paid_amount else None,
-            'change_amount': float(s.change_amount) if s.change_amount else None
-        } for s in sales]
-    }
-    return jsonify(report_data)
-
-@main_bp.route('/reports/stock')
-@admin_required
-def stock_report():
-    """
-    Endpoint para gerar relatório de estoque.
-    Apenas administradores podem acessar.
-    Lista todos os produtos com suas informações de estoque.
-    """
-    products = Product.query.order_by(Product.name).all()
-    report_data = [{
-        'id': p.id,
-        'name': p.name,
-        'stock': p.stock,
-        'price': float(p.price),
-        'description': p.description
-    } for p in products]
-    return jsonify(report_data)
-
-# --- NOVOS ENDPOINTS PARA DADOS DOS GRÁFICOS DO DASHBOARD ---
+    return render_template('reports_sales_by_period.html',
+                           sales=sales,
+                           total_sales_count=total_sales_count,
+                           total_revenue=total_revenue,
+                           start_date=start_date_str,
+                           end_date=end_date_str)
 
 @main_bp.route('/reports/top_products', methods=['GET'])
 @admin_required
 def top_products_report():
     """
-    Retorna os 5 produtos mais vendidos por quantidade para o gráfico de barras.
+    Gera um relatório dos produtos mais vendidos.
     """
+    # Consulta para somar a quantidade vendida de cada produto
     top_products = db.session.query(
         Product.name,
-        func.sum(SaleItem.quantity).label('total_quantity')
-    ).join(SaleItem).group_by(Product.name).order_by(func.sum(SaleItem.quantity).desc()).limit(5).all()
+        func.sum(SaleItem.quantity).label('total_quantity_sold'),
+        func.sum(SaleItem.quantity * SaleItem.price_at_sale).label('total_revenue_generated')
+    ).join(SaleItem).group_by(Product.name).order_by(func.sum(SaleItem.quantity).desc()).limit(10).all()
 
-    results = [{'name': p.name, 'quantity': p.total_quantity} for p in top_products]
-    return jsonify(results)
+    return render_template('reports_top_products.html', top_products=top_products)
 
-@main_bp.route('/reports/daily_sales', methods=['GET'])
+@main_bp.route('/reports/sales_by_user', methods=['GET'])
 @admin_required
-def daily_sales_report():
+def sales_by_user_report():
     """
-    Retorna a receita total por dia para os últimos 7 dias para o gráfico de linha.
+    Gera um relatório de vendas por usuário (operador).
     """
-    from datetime import timedelta, date, datetime
+    sales_by_user = db.session.query(
+        User.username,
+        func.count(Sale.id).label('total_sales_count'),
+        func.sum(Sale.total_amount).label('total_revenue')
+    ).join(Sale).group_by(User.username).order_by(func.sum(Sale.total_amount).desc()).all()
 
-    today = datetime.utcnow().date()
-    dates = [(today - timedelta(days=i)) for i in range(6, -1, -1)]
-
-    daily_revenue = []
-    for d in dates:
-        revenue = db.session.query(func.sum(Sale.total_amount)).filter(
-            func.date(Sale.timestamp) == d
-        ).scalar() or 0.0
-        daily_revenue.append({
-            'date': d.strftime('%d/%m'),
-            'revenue': float(revenue)
-        })
-
-    return jsonify(daily_revenue)
-
-# --- Rota de Importação de Produtos ---
-
-@main_bp.route('/import_products', methods=['GET', 'POST'])
-@admin_required
-def import_products():
-    """
-    Página e lógica para importar produtos via arquivo (CSV, XLSX, XLSM)
-    ou via tabela manual.
-    Apenas administradores podem acessar.
-    """
-    form = ProductImportForm()
-
-    if form.validate_on_submit():
-        file = form.file.data
-        filename = file.filename
-        file_extension = filename.rsplit('.', 1)[1].lower()
-
-        df = None
-        try:
-            file_content = file.read()
-
-            if file_extension == 'csv':
-                try:
-                    df = pd.read_csv(io.BytesIO(file_content), encoding='utf-8')
-                except UnicodeDecodeError:
-                    df = pd.read_csv(io.BytesIO(file_content), encoding='latin1')
-                except Exception as e:
-                    raise ValueError(f"Erro ao ler CSV: {e}")
-            elif file_extension in ['xlsx', 'xlsm']:
-                df = pd.read_excel(io.BytesIO(file_content))
-            else:
-                flash('Formato de arquivo não suportado.', 'danger')
-                return redirect(url_for('main.import_products'))
-
-            df.columns = df.columns.str.lower()
-
-            column_mapping = {
-                'nome': 'name',
-                'codigo_barras': 'barcode',
-                'preco_venda': 'price',
-                'estoque_atual': 'stock',
-            }
-
-            df.rename(columns=column_mapping, inplace=True)
-
-            required_columns = ['name', 'barcode', 'price', 'stock']
-            if not all(col in df.columns for col in required_columns):
-                missing_cols = [col for col in required_columns if col not in df.columns]
-                flash(f'O arquivo está faltando colunas essenciais: {", ".join(missing_cols)}. Verifique os cabeçalhos.', 'danger')
-                return redirect(url_for('main.import_products'))
-
-            imported_count = 0
-            updated_count = 0
-            errors = []
-
-            for index, row in df.iterrows():
-                name = str(row.get('name', '')).strip()
-                barcode = str(row.get('barcode', '')).strip()
-
-                try:
-                    price = float(str(row.get('price', 0)).replace(',', '.'))
-                    if price < 0: raise ValueError("Preço negativo")
-                except (ValueError, TypeError):
-                    errors.append(f"Linha {index+2}: Preço inválido para '{name}' ('{barcode}'): '{row.get('price', 'N/A')}'.")
-                    continue
-
-                try:
-                    stock = int(float(str(row.get('stock', 0)).replace(',', '.')))
-                    if stock < 0: raise ValueError("Estoque negativo")
-                except (ValueError, TypeError):
-                    errors.append(f"Linha {index+2}: Estoque inválido para '{name}' ('{barcode}'): '{row.get('stock', 'N/A')}'.")
-                    continue
-
-                if not name:
-                    errors.append(f"Linha {index+2}: Nome do produto ausente para código de barras '{barcode}'.")
-                    continue
-                if not barcode:
-                    errors.append(f"Linha {index+2}: Código de barras ausente para produto '{name}'.")
-                    continue
-
-                existing_product = Product.query.filter_by(barcode=barcode).first()
-
-                if existing_product:
-                    existing_product.name = name
-                    existing_product.price = price
-                    existing_product.stock = stock
-                    db.session.add(existing_product)
-                    updated_count += 1
-                else:
-                    new_product = Product(
-                        name=name,
-                        barcode=barcode,
-                        price=price,
-                        stock=stock
-                    )
-                    db.session.add(new_product)
-                    imported_count += 1
-
-            db.session.commit()
-            if imported_count > 0:
-                flash(f'{imported_count} produtos novos importados com sucesso!', 'success')
-            if updated_count > 0:
-                flash(f'{updated_count} produtos existentes atualizados com sucesso!', 'info')
-            if errors:
-                flash(f'Alguns produtos tiveram erros e não foram importados/atualizados: {"; ".join(errors[:5])}{"..." if len(errors) > 5 else ""}', 'warning')
-            if imported_count == 0 and updated_count == 0 and not errors:
-                flash('Nenhum produto foi importado ou atualizado a partir do arquivo.', 'info')
-
-            return redirect(url_for('main.products'))
-
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Erro ao processar arquivo de importação: {e}")
-            flash(f'Erro ao processar arquivo: {str(e)}', 'danger')
-            return redirect(url_for('main.import_products'))
-
-    elif request.method == 'POST' and request.form.get('products_json'):
-        products_json = request.form.get('products_json')
-        if not products_json:
-            flash('Nenhum dado de produto foi enviado da tabela.', 'danger')
-            return redirect(url_for('main.import_products'))
-
-        try:
-            products_data = json.loads(products_json)
-        except json.JSONDecodeError:
-            flash('Formato de dados JSON inválido da tabela.', 'danger')
-            return redirect(url_for('main.import_products'))
-
-        imported_count = 0
-        updated_count = 0
-        errors = []
-
-        for item_data in products_data:
-            name = str(item_data.get('name', '')).strip()
-            barcode = str(item_data.get('barcode', '')).strip()
-            price = item_data.get('price')
-            stock = item_data.get('stock')
-
-            if not name:
-                errors.append(f"Produto com nome ausente para código de barras '{barcode}'.")
-                continue
-            if not barcode:
-                errors.append(f"Produto '{name}' com código de barras ausente.")
-                continue
-            if not isinstance(price, (int, float)) or price < 0:
-                errors.append(f"Preço inválido para '{name}' ('{barcode}'): '{price}'.")
-                continue
-            if not isinstance(stock, int) or stock < 0:
-                errors.append(f"Estoque inválido para '{name}' ('{barcode}'): '{stock}'.")
-                continue
-
-            existing_product = Product.query.filter_by(barcode=barcode).first()
-
-            if existing_product:
-                existing_product.name = name
-                existing_product.price = price
-                existing_product.stock = stock
-                db.session.add(existing_product)
-                updated_count += 1
-            else:
-                new_product = Product(
-                    name=name,
-                    barcode=barcode,
-                    price=price,
-                    stock=stock
-                )
-                db.session.add(new_product)
-                imported_count += 1
-
-        try:
-            db.session.commit()
-            if imported_count > 0:
-                flash(f'{imported_count} produtos novos importados da tabela com sucesso!', 'success')
-            if updated_count > 0:
-                flash(f'{updated_count} produtos existentes da tabela atualizados com sucesso!', 'info')
-            if errors:
-                flash(f'Alguns produtos da tabela tiveram erros e não foram importados/atualizados: {"; ".join(errors)}', 'warning')
-            if imported_count == 0 and updated_count == 0 and not errors:
-                flash('Nenhum produto foi importado ou atualizado da tabela.', 'info')
-
-            return redirect(url_for('main.products'))
-
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Erro ao importar produtos (JSON da tabela): {e}")
-            flash(f'Erro ao importar produtos (JSON da tabela): {str(e)}', 'danger')
-            return redirect(url_for('main.import_products'))
-
-    return render_template('import_products.html', title='Importar Produtos', form=form)
+    return render_template('reports_sales_by_user.html', sales_by_user=sales_by_user)

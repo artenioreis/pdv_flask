@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Produtos Mais Vendidos{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mt-4">Relatório de Produtos Mais Vendidos</h1>
+    <ol class="breadcrumb mb-4">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('main.reports') }}">Relatórios</a></li>
+        <li class="breadcrumb-item active">Produtos Mais Vendidos</li>
+    </ol>
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="fas fa-chart-bar me-1"></i>
+            Top 10 Produtos Mais Vendidos
+        </div>
+        <div class="card-body">
+            {% if top_products %}
+            <div class="table-responsive">
+                <table class="table table-bordered" id="topProductsTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>Produto</th>
+                            <th>Quantidade Vendida</th>
+                            <th>Receita Gerada</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for product in top_products %}
+                        <tr>
+                            <td>{{ product.name }}</td>
+                            <td>{{ product.total_quantity_sold }}</td>
+                            <td>R$ {{ "%.2f"|format(product.total_revenue_generated) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p>Nenhum produto encontrado ou dados de venda insuficientes para gerar o relatório.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<!-- DataTables JS (se estiver usando para a tabela de produtos) -->
+<script src="https://cdn.datatables.net/1.10.20/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.10.20/js/dataTables.bootstrap4.min.js"></script>
+<script>
+    $(document).ready(function() {
+        $('#topProductsTable').DataTable({
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/1.10.20/i18n/Portuguese-Brasil.json"
+            },
+            "order": [[1, "desc"]] // Ordena pela quantidade vendida por padrão
+        });
+    });
+</script>
+{% endblock %}

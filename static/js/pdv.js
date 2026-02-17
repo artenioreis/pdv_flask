@@ -1,311 +1,347 @@
 // static/js/pdv.js
-document.addEventListener('DOMContentLoaded', function() {
-    const productSearch = document.getElementById('productSearch');
-    const searchResults = document.getElementById('searchResults');
-    const cartItems = document.getElementById('cartItems');
-    const cartTotalSpan = document.getElementById('cartTotal');
-    const clearCartBtn = document.getElementById('clearCartBtn');
-    const checkoutBtn = document.getElementById('checkoutBtn');
-    const paymentMethodSelect = document.getElementById('paymentMethod');
-    const paidAmountInput = document.getElementById('paidAmount');
-    const paidAmountGroup = document.getElementById('paidAmountGroup');
-    const changeAmountInput = document.getElementById('changeAmount');
-    const receiptModalElement = document.getElementById('receiptModal');
-    const receiptModal = new bootstrap.Modal(receiptModalElement);
-    const receiptContent = document.getElementById('receiptContent');
-    const printReceiptBtn = document.getElementById('printReceiptBtn');
 
-    let cart = []; // Array para armazenar os itens do carrinho
-
-    // --- Funções de Utilitário ---
-    function formatCurrency(value) {
-        return parseFloat(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+// Usar uma IIFE (Immediately Invoked Function Expression) para isolar o escopo
+// e garantir que o script seja executado apenas uma vez, mesmo se carregado múltiplas vezes.
+(function() {
+    // Verifica se o script já foi inicializado para evitar duplicação de listeners
+    if (window.pdvInitialized) {
+        console.warn("PDV script já inicializado. Ignorando nova execução.");
+        return;
     }
+    window.pdvInitialized = true; // Marca como inicializado
 
-    function parseCurrency(value) {
-        // Remove o símbolo da moeda, pontos de milhar e substitui vírgula por ponto decimal
-        return parseFloat(value.replace(/[R$ ]/g, '').replace('.', '').replace(',', '.'));
-    }
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchInput = document.getElementById('product-search');
+        const searchResults = document.getElementById('search-results');
+        const cartItemsContainer = document.getElementById('cart-items');
+        const cartTotalElement = document.getElementById('cart-total');
+        const checkoutBtn = document.getElementById('checkout-btn');
+        const paymentMethodSelect = document.getElementById('payment-method');
+        const paidAmountInput = document.getElementById('paid-amount');
+        const changeAmountElement = document.getElementById('change-amount');
+        const clearCartBtn = document.getElementById('clear-cart-btn');
+        const printReceiptModalElement = document.getElementById('printReceiptModal');
+        const printReceiptModal = new bootstrap.Modal(printReceiptModalElement);
+        const receiptContent = document.getElementById('receipt-content');
+        const printBtn = document.getElementById('print-btn');
+        const printAllBtn = document.getElementById('print-all-btn'); // Novo botão para imprimir todos
 
-    // --- Atualiza o Display do Carrinho ---
-    function updateCartDisplay() {
-        cartItems.innerHTML = '';
-        let total = 0;
+        let cart = [];
+        let currentReceiptsToPrint = []; // Armazena a lista de HTMLs de cupom para impressão
 
-        if (cart.length === 0) {
-            cartItems.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Carrinho vazio.</td></tr>';
-        } else {
-            cart.forEach((item, index) => {
-                const subtotal = item.price * item.quantity;
-                total += subtotal;
+        // Função debounce para limitar a frequência de chamadas de função
+        function debounce(func, delay) {
+            let timeout;
+            return function(...args) {
+                const context = this;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(context, args), delay);
+            };
+        }
 
-                const row = `
-                    <tr>
-                        <td>${item.name}</td>
-                        <td>
-                            <input type="number" class="form-control form-control-sm quantity-input"
-                                value="${item.quantity}" min="1" data-index="${index}">
-                        </td>
-                        <td>${formatCurrency(item.price)}</td>
-                        <td>${formatCurrency(subtotal)}</td>
-                        <td>
-                            <button class="btn btn-danger btn-sm remove-item-btn" data-index="${index}">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </td>
-                    </tr>
+        // Função para buscar produtos
+        searchInput.addEventListener('input', debounce(function() {
+            const query = searchInput.value.trim();
+            if (query.length > 1) {
+                fetch(`/pdv/search_product?query=${query}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(products => {
+                        searchResults.innerHTML = '';
+                        if (products.length > 0) {
+                            products.forEach(product => {
+                                const li = document.createElement('li');
+                                li.classList.add('list-group-item', 'list-group-item-action');
+                                li.textContent = `${product.name} (R$ ${product.price.toFixed(2)}) - Estoque: ${product.stock}`;
+                                li.dataset.productId = product.id;
+                                li.dataset.productName = product.name;
+                                li.dataset.productPrice = product.price;
+                                li.dataset.productStock = product.stock;
+                                li.addEventListener('click', addProductToCart);
+                                searchResults.appendChild(li);
+                            });
+                            searchResults.style.display = 'block';
+                        } else {
+                            searchResults.style.display = 'none';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro ao buscar produtos:', error);
+                        searchResults.innerHTML = '<li class="list-group-item text-danger">Erro ao buscar produtos.</li>';
+                        searchResults.style.display = 'block';
+                    });
+            } else {
+                searchResults.style.display = 'none';
+            }
+        }, 300));
+
+        // Função para adicionar produto ao carrinho
+        function addProductToCart(event) {
+            const productId = parseInt(event.target.dataset.productId);
+            const productName = event.target.dataset.productName;
+            const productPrice = parseFloat(event.target.dataset.productPrice);
+            const productStock = parseInt(event.target.dataset.productStock);
+
+            const existingItem = cart.find(item => item.id === productId);
+
+            if (existingItem) {
+                if (existingItem.quantity < productStock) {
+                    existingItem.quantity++;
+                } else {
+                    alert(`Estoque máximo (${productStock}) atingido para ${productName}.`);
+                }
+            } else {
+                if (productStock > 0) {
+                    cart.push({
+                        id: productId,
+                        name: productName,
+                        price: productPrice,
+                        quantity: 1,
+                        stock: productStock // Manter o estoque original para validação
+                    });
+                } else {
+                    alert(`Produto ${productName} sem estoque.`);
+                }
+            }
+            updateCartDisplay();
+            searchResults.style.display = 'none'; // Esconde os resultados após adicionar
+            searchInput.value = ''; // Limpa o campo de busca
+        }
+
+        // Função para remover item do carrinho
+        function removeItemFromCart(event) {
+            const productId = parseInt(event.target.dataset.id);
+            cart = cart.filter(item => item.id !== productId);
+            updateCartDisplay();
+        }
+
+        // Função para atualizar a exibição do carrinho
+        function updateCartDisplay() {
+            cartItemsContainer.innerHTML = '';
+            let total = 0;
+
+            if (cart.length === 0) {
+                cartItemsContainer.innerHTML = '<li class="list-group-item text-center text-muted">Carrinho vazio</li>';
+                cartTotalElement.textContent = '0.00';
+                checkoutBtn.disabled = true;
+                clearCartBtn.disabled = true;
+                return;
+            }
+
+            cart.forEach(item => {
+                const li = document.createElement('li');
+                li.classList.add('list-group-item', 'd-flex', 'justify-content-between', 'align-items-center');
+                li.innerHTML = `
+                    <div>
+                        ${item.name} (R$ ${item.price.toFixed(2)})
+                        <br>
+                        <small>Estoque: ${item.stock}</small>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <button class="btn btn-sm btn-outline-secondary me-1" data-id="${item.id}" data-action="decrease">-</button>
+                        <span class="badge bg-primary rounded-pill me-1">${item.quantity}</span>
+                        <button class="btn btn-sm btn-outline-secondary me-1" data-id="${item.id}" data-action="increase">+</button>
+                        <button class="btn btn-sm btn-outline-danger" data-id="${item.id}" data-action="remove">x</button>
+                    </div>
                 `;
-                cartItems.innerHTML += row;
+                cartItemsContainer.appendChild(li);
+                total += item.price * item.quantity;
+            });
+
+            cartTotalElement.textContent = total.toFixed(2);
+            checkoutBtn.disabled = false;
+            clearCartBtn.disabled = false;
+            calculateChange(); // Recalcula o troco ao atualizar o carrinho
+        }
+
+        // Event listeners para botões de quantidade e remoção no carrinho
+        cartItemsContainer.addEventListener('click', function(event) {
+            const target = event.target;
+            const productId = parseInt(target.dataset.id);
+            const action = target.dataset.action;
+
+            if (action === 'increase') {
+                const item = cart.find(i => i.id === productId);
+                if (item && item.quantity < item.stock) {
+                    item.quantity++;
+                } else if (item) {
+                    alert(`Estoque máximo (${item.stock}) atingido para ${item.name}.`);
+                }
+            } else if (action === 'decrease') {
+                const item = cart.find(i => i.id === productId);
+                if (item && item.quantity > 1) {
+                    item.quantity--;
+                } else if (item) {
+                    removeItemFromCart(event); // Remove se a quantidade chegar a 0
+                }
+            } else if (action === 'remove') {
+                removeItemFromCart(event);
+            }
+            updateCartDisplay();
+        });
+
+        // Limpar carrinho
+        clearCartBtn.addEventListener('click', function() {
+            cart = [];
+            updateCartDisplay();
+            paidAmountInput.value = '0.00';
+            calculateChange();
+        });
+
+        // Calcular troco
+        paidAmountInput.addEventListener('input', calculateChange);
+        paymentMethodSelect.addEventListener('change', calculateChange);
+
+        function calculateChange() {
+            const total = parseFloat(cartTotalElement.textContent);
+            const paid = parseFloat(paidAmountInput.value) || 0;
+            const paymentMethod = paymentMethodSelect.value;
+
+            let change = paid - total;
+            changeAmountElement.textContent = `R$ ${change.toFixed(2)}`;
+
+            if (change >= 0) {
+                changeAmountElement.classList.remove('text-danger');
+                changeAmountElement.classList.add('text-success');
+                checkoutBtn.disabled = cart.length === 0; // Habilita se houver itens e troco suficiente
+            } else {
+                changeAmountElement.classList.remove('text-success');
+                changeAmountElement.classList.add('text-danger');
+                checkoutBtn.disabled = true; // Desabilita se o valor pago for insuficiente
+            }
+
+            // Se o método de pagamento não for dinheiro, não exige valor pago exato
+            if (paymentMethod !== 'Dinheiro') {
+                checkoutBtn.disabled = cart.length === 0; // Habilita se houver itens
+                paidAmountInput.value = total.toFixed(2); // Preenche o valor pago com o total
+                changeAmountElement.textContent = 'R$ 0.00';
+                changeAmountElement.classList.remove('text-danger');
+                changeAmountElement.classList.add('text-success');
+            }
+        }
+
+        // Finalizar Venda
+        checkoutBtn.addEventListener('click', function() {
+            if (cart.length === 0) {
+                alert('O carrinho está vazio. Adicione produtos para finalizar a venda.');
+                return;
+            }
+
+            const total = parseFloat(cartTotalElement.textContent);
+            const paid = parseFloat(paidAmountInput.value) || 0;
+            const paymentMethod = paymentMethodSelect.value;
+
+            if (paid < total && paymentMethod === 'Dinheiro') {
+                alert('O valor pago é insuficiente para finalizar a venda em dinheiro.');
+                return;
+            }
+
+            const saleData = {
+                cart: cart.map(item => ({
+                    id: item.id,
+                    name: item.name,
+                    price: item.price,
+                    quantity: item.quantity
+                })),
+                total_amount: total,
+                payment_method: paymentMethod,
+                paid_amount: paid,
+                change_amount: paid - total
+            };
+
+            fetch('/pdv/checkout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(saleData)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { throw new Error(err.message || 'Erro desconhecido no checkout'); });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    currentReceiptsToPrint = data.receipt_htmls; // Armazena a lista de HTMLs
+                    if (currentReceiptsToPrint && currentReceiptsToPrint.length > 0) {
+                        // Exibe o primeiro cupom no modal para pré-visualização
+                        receiptContent.innerHTML = currentReceiptsToPrint[0];
+                        printReceiptModal.show();
+                        // Habilita/desabilita o botão "Imprimir Todos"
+                        printAllBtn.style.display = currentReceiptsToPrint.length > 1 ? 'block' : 'none';
+                    } else {
+                        alert('Venda finalizada com sucesso, mas nenhum cupom foi gerado.');
+                    }
+
+                    // Limpa o carrinho após a venda bem-sucedida
+                    cart = [];
+                    updateCartDisplay();
+                    paidAmountInput.value = '0.00';
+                    calculateChange();
+                } else {
+                    alert(`Erro ao finalizar venda: ${data.message}`);
+                }
+            })
+            .catch(error => {
+                console.error('Erro no checkout:', error);
+                alert(`Ocorreu um erro ao finalizar a venda: ${error.message}`);
+            });
+        });
+
+        // Função para imprimir um único cupom
+        function printSingleReceipt(receiptHtml) {
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write('<html><head><title>Cupom Fiscal</title>');
+            printWindow.document.write('<style>');
+            printWindow.document.write(`
+                body { font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; margin: 0; padding: 10px; }
+                .receipt-container { width: 80mm; margin: 0 auto; border: none; padding: 0; }
+                .receipt-header, .receipt-body, .receipt-footer { text-align: center; }
+                .receipt-body p, .receipt-footer p { margin: 2px 0; }
+                .product-name-highlight { font-weight: bold; }
+                hr { border-top: 1px dashed #888; margin: 5px 0; }
+                @media print {
+                    body { margin: 0; padding: 0; }
+                    .receipt-container { border: none; }
+                }
+            `);
+            printWindow.document.write('</style></head><body>');
+            printWindow.document.write(receiptHtml);
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            printWindow.focus();
+            printWindow.print();
+            // printWindow.close(); // Comentado para permitir que o usuário feche manualmente se desejar
+        }
+
+        // Event listener para o botão "Imprimir Cupom Atual" (no modal, imprime o cupom atualmente exibido)
+        printBtn.addEventListener('click', function() {
+            if (currentReceiptsToPrint && currentReceiptsToPrint.length > 0) {
+                printSingleReceipt(currentReceiptsToPrint[0]); // Imprime apenas o primeiro cupom exibido no modal
+                printReceiptModal.hide(); // Esconde o modal após a impressão
+            }
+        });
+
+        // Event listener para o novo botão "Imprimir Todos os Cupons"
+        if (printAllBtn) { // Verifica se o botão existe
+            printAllBtn.addEventListener('click', function() {
+                if (currentReceiptsToPrint && currentReceiptsToPrint.length > 0) {
+                    currentReceiptsToPrint.forEach(receiptHtml => {
+                        printSingleReceipt(receiptHtml); // Imprime cada cupom da lista
+                    });
+                    printReceiptModal.hide(); // Esconde o modal após a impressão de todos
+                }
             });
         }
 
-        cartTotalSpan.textContent = formatCurrency(total);
-        updatePaymentDetails(total); // Atualiza os detalhes de pagamento e troco
-    }
-
-    // --- Adiciona Produto ao Carrinho ---
-    function addProductToCart(product) {
-        const existingItem = cart.find(item => item.id === product.id);
-        if (existingItem) {
-            if (existingItem.quantity < product.stock) {
-                existingItem.quantity++;
-                flashMessage(`Quantidade de "${product.name}" atualizada no carrinho.`, 'info');
-            } else {
-                flashMessage(`Estoque máximo de "${product.name}" atingido.`, 'warning');
-            }
-        } else {
-            if (product.stock > 0) {
-                cart.push({
-                    id: product.id,
-                    name: product.name,
-                    price: product.price,
-                    stock: product.stock, // Mantém o estoque original para validação
-                    quantity: 1
-                });
-                flashMessage(`"${product.name}" adicionado ao carrinho.`, 'success');
-            } else {
-                flashMessage(`"${product.name}" está fora de estoque.`, 'danger');
-            }
-        }
+        // Inicializa a exibição do carrinho ao carregar a página
         updateCartDisplay();
-        productSearch.value = ''; // Limpa o campo de busca
-        searchResults.innerHTML = ''; // Limpa os resultados da busca
-    }
-
-    // --- Atualiza Detalhes de Pagamento e Troco ---
-    function updatePaymentDetails(total) {
-        const paymentMethod = paymentMethodSelect.value;
-        let paidAmount = parseFloat(paidAmountInput.value) || 0; // Garante que seja um número, 0 se vazio
-
-        // Se o método não for Dinheiro, o valor pago é igual ao total da venda
-        if (paymentMethod !== 'Dinheiro') {
-            paidAmountGroup.style.display = 'none'; // Esconde o campo de valor pago
-            paidAmount = total; // Valor pago é o total da venda
-            paidAmountInput.value = total.toFixed(2); // Atualiza o input (mesmo que escondido)
-        } else {
-            paidAmountGroup.style.display = 'block'; // Mostra o campo de valor pago
-            // Se o campo de valor pago estiver vazio, define como 0 para o cálculo
-            if (paidAmountInput.value === '' || isNaN(paidAmount)) {
-                paidAmountInput.value = '0.00';
-                paidAmount = 0;
-            }
-        }
-
-        const change = paidAmount - total;
-        changeAmountInput.value = change.toFixed(2);
-
-        if (change < 0) {
-            changeAmountInput.classList.remove('text-success');
-            changeAmountInput.classList.add('text-danger');
-        } else {
-            changeAmountInput.classList.remove('text-danger');
-            changeAmountInput.classList.add('text-success');
-        }
-    }
-
-    // --- Mensagens Flash ---
-    function flashMessage(message, category) {
-        const alertContainer = document.querySelector('.container-fluid.py-4'); // Ou o container onde você quer as mensagens
-        if (!alertContainer) return; // Garante que o container existe
-
-        const alertDiv = document.createElement('div');
-        alertDiv.className = `alert alert-${category} alert-dismissible fade show mt-3`;
-        alertDiv.setAttribute('role', 'alert');
-        alertDiv.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        `;
-        alertContainer.prepend(alertDiv);
-        setTimeout(() => alertDiv.remove(), 5000);
-    }
-
-    // --- Event Listeners ---
-
-    // Busca de produtos
-    productSearch.addEventListener('input', function() {
-        const query = this.value.trim();
-        if (query.length > 1) {
-            fetch(`/pdv/search_product?query=${query}`)
-                .then(response => response.json())
-                .then(products => {
-                    searchResults.innerHTML = '';
-                    if (products.length > 0) {
-                        products.forEach(product => {
-                            const item = document.createElement('a');
-                            item.href = '#';
-                            item.classList.add('list-group-item', 'list-group-item-action');
-                            item.textContent = `${product.name} (R$ ${product.price.toFixed(2)}) - Estoque: ${product.stock}`;
-                            item.addEventListener('click', function(e) {
-                                e.preventDefault();
-                                addProductToCart(product);
-                            });
-                            searchResults.appendChild(item);
-                        });
-                    } else {
-                        searchResults.innerHTML = '<a href="#" class="list-group-item list-group-item-action disabled">Nenhum produto encontrado.</a>';
-                    }
-                })
-                .catch(error => {
-                    console.error('Erro na busca de produtos:', error);
-                    searchResults.innerHTML = '<a href="#" class="list-group-item list-group-item-action disabled text-danger">Erro ao buscar produtos.</a>';
-                });
-        } else {
-            searchResults.innerHTML = '';
-        }
+        calculateChange();
     });
-
-    // Atualiza quantidade no carrinho
-    cartItems.addEventListener('change', function(e) {
-        if (e.target.classList.contains('quantity-input')) {
-            const index = parseInt(e.target.dataset.index);
-            let newQuantity = parseInt(e.target.value);
-
-            if (isNaN(newQuantity) || newQuantity < 1) {
-                newQuantity = 1;
-                e.target.value = 1;
-            }
-
-            const item = cart[index];
-            if (newQuantity > item.stock) {
-                flashMessage(`Quantidade máxima para "${item.name}" é ${item.stock}.`, 'warning');
-                newQuantity = item.stock;
-                e.target.value = item.stock;
-            }
-            item.quantity = newQuantity;
-            updateCartDisplay();
-        }
-    });
-
-    // Remove item do carrinho
-    cartItems.addEventListener('click', function(e) {
-        if (e.target.closest('.remove-item-btn')) {
-            const index = parseInt(e.target.closest('.remove-item-btn').dataset.index);
-            const removedItem = cart.splice(index, 1);
-            flashMessage(`"${removedItem[0].name}" removido do carrinho.`, 'info');
-            updateCartDisplay();
-        }
-    });
-
-    // Limpar carrinho
-    clearCartBtn.addEventListener('click', function() {
-        if (confirm('Tem certeza que deseja limpar o carrinho?')) {
-            cart = [];
-            updateCartDisplay();
-            flashMessage('Carrinho limpo.', 'info');
-        }
-    });
-
-    // Finalizar Venda
-    checkoutBtn.addEventListener('click', function() {
-        if (cart.length === 0) {
-            flashMessage('O carrinho está vazio. Adicione produtos para finalizar a venda.', 'warning');
-            return;
-        }
-
-        const totalAmount = parseCurrency(cartTotalSpan.textContent);
-        const paymentMethod = paymentMethodSelect.value;
-        let paidAmount = parseFloat(paidAmountInput.value) || 0;
-        const changeAmount = parseFloat(changeAmountInput.value) || 0;
-
-        if (paymentMethod === 'Dinheiro' && paidAmount < totalAmount) {
-            flashMessage('Valor pago insuficiente para pagamento em dinheiro.', 'danger');
-            return;
-        }
-
-        // Para outros métodos de pagamento, o valor pago é o total da venda
-        if (paymentMethod !== 'Dinheiro') {
-            paidAmount = totalAmount;
-        }
-
-        fetch('/pdv/checkout', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                cart: cart,
-                payment_method: paymentMethod,
-                total_amount: totalAmount,
-                paid_amount: paidAmount,
-                change_amount: changeAmount
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                flashMessage(data.message, 'success');
-
-                // Limpa o carrinho e atualiza o display imediatamente
-                cart = [];
-                updateCartDisplay();
-
-                // Preenche o modal com os cupons e o exibe
-                if (data.receipt_htmls && data.receipt_htmls.length > 0) {
-                    receiptContent.innerHTML = data.receipt_htmls.join('<hr style="border-top: 2px dashed #ccc; margin: 20px 0;">');
-                    receiptModal.show(); // Exibe o modal de visualização
-                }
-            } else {
-                flashMessage(data.message, 'danger');
-            }
-        })
-        .catch(error => {
-            console.error('Erro ao finalizar venda:', error);
-            flashMessage('Erro de conexão ao finalizar a venda.', 'danger');
-        });
-    });
-
-    // Atualiza detalhes de pagamento ao mudar o método
-    paymentMethodSelect.addEventListener('change', function() {
-        updatePaymentDetails(parseCurrency(cartTotalSpan.textContent));
-    });
-
-    // Atualiza detalhes de pagamento ao digitar o valor pago
-    paidAmountInput.addEventListener('input', function() {
-        updatePaymentDetails(parseCurrency(cartTotalSpan.textContent));
-    });
-
-    // Função para imprimir o conteúdo do modal (acionada pelo botão no modal)
-    printReceiptBtn.addEventListener('click', function() {
-        const printWindow = window.open('', '_blank');
-        printWindow.document.write('<html><head><title>Cupons</title>');
-        printWindow.document.write('<style>');
-        printWindow.document.write('body { font-family: "Courier New", Courier, monospace; font-size: 14px; margin: 0; padding: 10px; font-weight: bold; }');
-        printWindow.document.write('hr { border-top: 2px dashed #000; margin: 20px 0; page-break-after: always; }');
-        printWindow.document.write('</style>');
-        printWindow.document.write('</head><body>');
-        printWindow.document.write(receiptContent.innerHTML); // Conteúdo do modal
-        printWindow.document.write('</body></html>');
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
-        // Não fechar o modal aqui, o usuário pode querer fechar manualmente ou imprimir novamente
-    });
-
-    // Listeners para o modal do cupom para forçar redesenho
-    receiptModalElement.addEventListener('hidden.bs.modal', function () {
-        window.dispatchEvent(new Event('resize'));
-    });
-
-    // Inicializa o display do carrinho e detalhes de pagamento
-    updateCartDisplay();
-});
+})(); // Fim da IIFE
