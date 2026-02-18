@@ -67,7 +67,7 @@ def dashboard():
                            total_revenue_today=total_revenue_today,
                            low_stock_count=low_stock_count)
 
-# --- APIs para Gráficos ---
+# --- APIs para Gráficos e Relatórios ---
 @main_bp.route('/reports/top_products')
 @admin_required
 def top_products_api():
@@ -90,6 +90,56 @@ def daily_sales_api():
         revenue = db.session.query(func.sum(Sale.total_amount)).filter(func.date(Sale.timestamp) == day).scalar() or 0
         sales_data.append({'date': day.strftime('%d/%m'), 'revenue': float(revenue)})
     return jsonify(sales_data)
+
+@main_bp.route('/reports/cash_flow')
+@admin_required
+def cash_flow_api():
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    query = Sale.query
+    if start_date:
+        query = query.filter(Sale.timestamp >= datetime.strptime(start_date, '%Y-%m-%d'))
+    if end_date:
+        query = query.filter(Sale.timestamp < datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1))
+    
+    sales = query.all()
+    operators_data = {}
+    total_general = 0
+    
+    for sale in sales:
+        op_name = sale.operator.username
+        if op_name not in operators_data:
+            operators_data[op_name] = {'Dinheiro': 0, 'Cartao Credito': 0, 'Cartao Debito': 0, 'Pix': 0, 'Total': 0}
+        
+        method = sale.payment_method
+        # Normalização simples para bater com as chaves do dicionário
+        if method in operators_data[op_name]:
+            operators_data[op_name][method] += sale.total_amount
+        
+        operators_data[op_name]['Total'] += sale.total_amount
+        total_general += sale.total_amount
+        
+    return jsonify({'operators': operators_data, 'total_general': float(total_general)})
+
+@main_bp.route('/reports/stock')
+@admin_required
+def stock_report_api():
+    products = Product.query.all()
+    product_list = []
+    total_value = 0
+    
+    for p in products:
+        val = p.price * p.stock
+        product_list.append({
+            'name': p.name,
+            'stock': p.stock,
+            'price': float(p.price),
+            'value': float(val)
+        })
+        total_value += val
+        
+    return jsonify({'products': product_list, 'total_value': float(total_value)})
 
 # --- Gerenciamento de Produtos ---
 @main_bp.route('/products')

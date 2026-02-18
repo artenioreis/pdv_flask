@@ -1,3 +1,4 @@
+
 # app.py (Verifique se está similar a isso)
 from flask import Flask
 from extensions import db, login_manager, migrate # Importe migrate
