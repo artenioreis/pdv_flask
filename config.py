@@ -10,6 +10,3 @@ class Config:
     # Caminho para o logotipo da empresa (usado nos templates e cupons)
     LOGO_PATH = '/static/img/logo.png'
     COMPANY_NAME = 'HOUSEHOT SWING CLUB'
-    ##COMPANY_ADDRESS = 'R.Carlos Vasconcelos,2206-Aldeota,'
-    ##COMPANY_PHONE = '(85)98676-4926'
-    ##COMPANY_CNPJ = 'Copyright By Cachorrão'

@@ -15,7 +15,6 @@
         const clearCartBtn = document.getElementById('clear-cart-btn');
         const printReceiptModal = new bootstrap.Modal(document.getElementById('printReceiptModal'));
         const receiptContent = document.getElementById('receipt-content');
-        const printBtn = document.getElementById('print-btn');
         const printAllBtn = document.getElementById('print-all-btn');
 
         let cart = [];
@@ -61,7 +60,6 @@
             const totalStr = total.toFixed(2);
             cartTotalElement.textContent = totalStr;
             
-            // Ajuste: Preencher valor pago com o total automaticamente
             if (cart.length > 0) {
                 paidAmountInput.value = totalStr;
             } else {
@@ -79,7 +77,6 @@
 
             changeAmountElement.textContent = `R$ ${change.toFixed(2)}`;
             
-            // Regra de ativação do botão Finalizar
             if (cart.length === 0) {
                 checkoutBtn.disabled = true;
                 clearCartBtn.disabled = true;
@@ -87,7 +84,6 @@
             } else {
                 clearCartBtn.disabled = false;
                 if (method === 'Dinheiro') {
-                    // Só ativa se o valor pago cobrir o total
                     if (change >= 0) {
                         checkoutBtn.disabled = false;
                         changeAmountElement.className = 'text-success font-weight-bold';
@@ -96,21 +92,17 @@
                         changeAmountElement.className = 'text-danger';
                     }
                 } else {
-                    // Outros métodos ativam direto (considera-se pago o valor exato)
                     checkoutBtn.disabled = false;
                     changeAmountElement.className = 'text-success';
                 }
             }
         }
 
-        // Listeners para atualizar troco e botão
         paidAmountInput.oninput = calculateChange;
         paymentMethodSelect.onchange = calculateChange;
 
-        // Limpar Carrinho
         clearCartBtn.onclick = () => { cart = []; updateCart(); };
 
-        // Busca de Produtos
         searchInput.oninput = () => {
             const q = searchInput.value.trim();
             if (q.length > 0) {
@@ -142,7 +134,6 @@
             } else searchResults.style.display = 'none';
         };
 
-        // Finalizar Venda
         checkoutBtn.onclick = () => {
             const total = parseFloat(cartTotalElement.textContent);
             const paid = parseFloat(paidAmountInput.value) || 0;
@@ -162,24 +153,41 @@
             .then(r => r.json()).then(res => {
                 if (res.success) {
                     receipts = res.receipt_htmls;
-                    receiptContent.innerHTML = receipts[0];
-                    printAllBtn.style.display = receipts.length > 1 ? 'block' : 'none';
+                    // Insere todos os cupons no modal separados por uma linha visual
+                    receiptContent.innerHTML = receipts.join('<hr style="border-top: 2px dashed #000; margin: 30px 0;">');
                     printReceiptModal.show();
-                    cart = []; updateCart();
+                    
+                    // Dispara a impressão de todos automaticamente
+                    printAllReceipts();
+
+                    cart = []; 
+                    updateCart();
                 } else alert('Erro: ' + res.message);
             })
             .catch(() => alert('Erro na comunicação com o servidor'));
         };
 
-        // Impressão
-        function printSingle(html) {
+        function printAllReceipts() {
             const win = window.open('', '_blank');
-            win.document.write(`<html><body onload="window.print();window.close()">${html}</body></html>`);
+            win.document.write('<html><head><title>Imprimir Cupons</title></head><body>');
+            // Adiciona quebra de página entre os cupons para a impressora térmica entender como cortes
+            receipts.forEach((html, index) => {
+                win.document.write(html);
+                if (index < receipts.length - 1) {
+                    win.document.write('<div style="page-break-after: always;"></div>');
+                }
+            });
+            win.document.write('</body></html>');
             win.document.close();
+            win.focus();
+            // Pequeno delay para garantir o carregamento do conteúdo antes de abrir o diálogo
+            setTimeout(() => {
+                win.print();
+                win.close();
+            }, 500);
         }
 
-        printBtn.onclick = () => printSingle(receipts[0]);
-        printAllBtn.onclick = () => receipts.forEach(printSingle);
+        printAllBtn.onclick = () => printAllReceipts();
 
         updateCart();
     });

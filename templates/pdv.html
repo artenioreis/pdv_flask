@@ -11,7 +11,6 @@
     </ol>
 
     <div class="row">
-        <!-- Coluna de Busca de Produtos e Carrinho -->
         <div class="col-lg-8">
             <div class="card mb-4">
                 <div class="card-header">
@@ -22,8 +21,7 @@
                     <div class="mb-3">
                         <input type="text" id="product-search" class="form-control" placeholder="Buscar produto por nome ou código de barras...">
                         <ul id="search-results" class="list-group mt-2" style="display: none; position: absolute; z-index: 1000; width: calc(100% - 30px); max-height: 300px; overflow-y: auto; background-color: white; border: 1px solid #ccc;">
-                            <!-- Resultados da busca serão inseridos aqui -->
-                        </ul>
+                            </ul>
                     </div>
                 </div>
             </div>
@@ -42,14 +40,12 @@
                 </div>
                 <div class="card-body">
                     <ul id="cart-items" class="list-group mb-3">
-                        <!-- Itens do carrinho serão inseridos aqui -->
-                    </ul>
+                        </ul>
                     <h4 class="text-end">Total: R$ <span id="cart-total">0.00</span></h4>
                 </div>
             </div>
         </div>
 
-        <!-- Coluna de Pagamento e Checkout -->
         <div class="col-lg-4">
             <div class="card mb-4">
                 <div class="card-header">
@@ -83,7 +79,6 @@
     </div>
 </div>
 
-<!-- Modal de Impressão de Cupom -->
 <div class="modal fade" id="printReceiptModal" tabindex="-1" aria-labelledby="printReceiptModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
@@ -92,18 +87,12 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <!-- O conteúdo do cupom (ou o primeiro cupom da lista) será carregado aqui pelo JavaScript -->
-                <div id="receipt-content" style="font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; line-height: 1.4; border: 1px dashed #ccc; padding: 10px; margin-bottom: 15px;">
-                    <!-- Conteúdo do primeiro cupom para pré-visualização -->
-                </div>
-                <div id="receipt-list-container" style="max-height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; display: none;">
-                    <!-- Futuramente, se necessário, uma lista de mini-cupons ou navegação entre eles -->
+                <div id="receipt-content" style="font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; line-height: 1.4; border: 1px solid #eee; padding: 20px; max-height: 500px; overflow-y: auto;">
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-                <button type="button" class="btn btn-info" id="print-btn">Imprimir Cupom Atual</button>
-                <button type="button" class="btn btn-primary" id="print-all-btn" style="display: none;">Imprimir Todos os Cupons</button>
+                <button type="button" class="btn btn-primary" id="print-all-btn">Reimprimir Todos os Cupons</button>
             </div>
         </div>
     </div>
@@ -112,8 +101,6 @@
 {% endblock %}
 
 {% block scripts_extra %}
-<!-- Bootstrap Bundle with Popper -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<!-- Custom PDV JS -->
 <script src="{{ url_for('static', filename='js/pdv.js') }}"></script>
 {% endblock %}

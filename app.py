@@ -1,5 +1,4 @@
-
-# app.py (Verifique se está similar a isso)
+# app.py
 from flask import Flask
 from extensions import db, login_manager, migrate # Importe migrate
 from models import User # Importe User para que o Flask-Login saiba qual modelo usar
@@ -39,6 +38,5 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    # Ajuste para acesso na rede: host='0.0.0.0' permite acesso externo
-    # Opcional: mude a porta se desejar (ex: port=5000)
+    # Ajustado para habilitar debug e permitir acesso na rede local (host='0.0.0.0')
     app.run(debug=True, host='0.0.0.0', port=5000)
