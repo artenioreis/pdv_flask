@@ -197,6 +197,10 @@ def pdv_checkout():
         new_sale = Sale(user_id=current_user.id, total_amount=data['total_amount'], payment_method=data['payment_method'], paid_amount=data['paid_amount'], change_amount=data['change_amount'])
         db.session.add(new_sale)
         db.session.flush()
+        
+        # Formata a data e hora atual para o cupom
+        current_time_str = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        
         all_receipts = []
         counter = 0
         for item in data['cart']:
@@ -208,7 +212,7 @@ def pdv_checkout():
             p.stock -= item['quantity']
             for _ in range(item['quantity']):
                 counter += 1
-                all_receipts.append(f"""<div class="receipt-container" style="font-weight: bold; margin-bottom: 70px; text-align: center; font-family: sans-serif;"><p style="font-size: 1.5em; margin: 0;">HOUSEHOT SWING CLUB</p><p style="margin: 5px 0;">VENDA: #{new_sale.id}</p><hr style="border-top: 1px dashed #000;"><p>Item {counter} de {sum(i['quantity'] for i in data['cart'])}</p><p style="font-size: 1.6em; border: 2px solid #000; padding: 10px; margin: 10px 0; text-transform: uppercase;">{item['name']}</p><p>1 UN x R$ {item['price']:.2f}</p><hr style="border-top: 1px dashed #000;"><p style="font-size: 1.1em;">PAGAMENTO: {data['payment_method']}</p><p>VALOR PAGO: R$ {data['paid_amount']:.2f}</p><p>TROCO: R$ {data['change_amount']:.2f}</p><hr style="border-top: 1px dashed #000;"><p>Obrigado pela preferência!</p></div>""")
+                all_receipts.append(f"""<div class="receipt-container" style="font-weight: bold; margin-bottom: 70px; text-align: center; font-family: sans-serif;"><p style="font-size: 1.5em; margin: 0;">HOUSEHOT SWING CLUB</p><p style="margin: 5px 0;">VENDA: #{new_sale.id}</p><p style="margin: 2px 0;">DATA: {current_time_str}</p><hr style="border-top: 1px dashed #000;"><p>Item {counter} de {sum(i['quantity'] for i in data['cart'])}</p><p style="font-size: 1.6em; border: 2px solid #000; padding: 10px; margin: 10px 0; text-transform: uppercase;">{item['name']}</p><p>1 UN x R$ {item['price']:.2f}</p><hr style="border-top: 1px dashed #000;"><p style="font-size: 1.1em;">PAGAMENTO: {data['payment_method']}</p><p>VALOR PAGO: R$ {data['paid_amount']:.2f}</p><p>TROCO: R$ {data['change_amount']:.2f}</p><hr style="border-top: 1px dashed #000;"><p>Obrigado pela preferência!</p></div>""")
         db.session.commit()
         return jsonify({'success': True, 'receipt_htmls': all_receipts})
     except Exception as e:
