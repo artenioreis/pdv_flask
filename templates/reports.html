@@ -1,15 +1,15 @@
 {# templates/reports.html #}
 {% extends "base.html" %}
-{% block title %}Relatórios{% endblock %}
+{% block title %}Relatórios Estratégicos{% endblock %}
 {% block content %}
 <div class="container-fluid">
-    <h1 class="mb-4">Relatórios do Sistema</h1>
+    <h1 class="mb-4">Relatórios de Gestão e BI</h1>
 
     <div class="row">
         <div class="col-md-6">
             <div class="card mb-4 shadow-sm">
                 <div class="card-header bg-primary text-white">
-                    <i class="fas fa-cash-register me-1"></i> Relatório de Caixa (por Operador)
+                    <i class="fas fa-cash-register me-1"></i> Fechamento de Caixa por Operador
                 </div>
                 <div class="card-body">
                     <div class="row g-3 mb-3">
@@ -29,12 +29,11 @@
 
                     <div id="cashReportResults" class="mt-4" style="display: none;">
                         <div id="printableCashArea">
-                            <h5 class="text-center">Resumo Financeiro por Operador</h5>
+                            <h5 class="text-center">Resumo de Vendas por Operador</h5>
                             <hr>
-                            <div id="operatorTablesContainer">
-                                </div>
+                            <div id="operatorTablesContainer"></div>
                             <div class="alert alert-info mt-3">
-                                <strong>TOTAL GERAL (TODOS OS CAIXAS): R$ <span id="totalGeneralAmount">0.00</span></strong>
+                                <strong>TOTAL GERAL CONSOLIDADO: R$ <span id="totalGeneralAmount">0.00</span></strong>
                             </div>
                         </div>
                     </div>
@@ -45,32 +44,58 @@
         <div class="col-md-6">
             <div class="card mb-4 shadow-sm">
                 <div class="card-header bg-success text-white">
-                    <i class="fas fa-boxes me-1"></i> Relatório de Estoque e Valor Inventariado
+                    <i class="fas fa-boxes me-1"></i> Inventário e Valor de Ativo em Estoque
                 </div>
                 <div class="card-body">
-                    <button class="btn btn-success w-100 mb-2" id="generateStockReportBtn">Gerar Relatório de Estoque</button>
+                    <button class="btn btn-success w-100 mb-2" id="generateStockReportBtn">Gerar Inventário</button>
                     <button class="btn btn-outline-secondary w-100" id="printStockReportBtn" style="display: none;">
-                        <i class="fas fa-print"></i> Imprimir Relatório de Estoque
+                        <i class="fas fa-print"></i> Imprimir Inventário
                     </button>
 
                     <div id="stockReportResults" class="mt-4" style="display: none;">
                         <div id="printableStockArea">
-                            <h5 class="text-center">Inventário de Produtos</h5>
+                            <h5 class="text-center">Relatório de Ativo Circulante (Estoque)</h5>
                             <table class="table table-sm table-striped mt-3">
-                                <thead>
+                                <thead class="table-dark">
                                     <tr>
                                         <th>Produto</th>
                                         <th>Qtd</th>
-                                        <th>Preço Un.</th>
-                                        <th>Valor Total</th>
+                                        <th>Custo/Preço</th>
+                                        <th class="text-end">Valor Total</th>
                                     </tr>
                                 </thead>
                                 <tbody id="stockList"></tbody>
                             </table>
                             <div class="alert alert-success mt-3 text-end">
-                                <strong>Valor Total em Estoque: R$ <span id="totalStockValue">0.00</span></strong>
+                                <strong>Capital Total Imobilizado: R$ <span id="totalStockValue">0.00</span></strong>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-warning text-dark">
+                    <i class="fas fa-chart-line me-1"></i> Performance de Produtos (Curva ABC Simplicada)
+                </div>
+                <div class="card-body">
+                    <button class="btn btn-warning w-100 mb-3" id="generateTopBtn">Analisar Top 10 Produtos</button>
+                    <div id="topProductsContainer" style="display:none;">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Posição</th>
+                                    <th>Produto</th>
+                                    <th>Qtd. Vendida</th>
+                                    <th class="text-end">Receita Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="topProductsBody"></tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -83,7 +108,6 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         
-        // Função Auxiliar para Impressão
         function printDiv(divId, title) {
             const content = document.getElementById(divId).innerHTML;
             const win = window.open('', '_blank');
@@ -96,7 +120,6 @@
             setTimeout(() => { win.print(); win.close(); }, 500);
         }
 
-        // --- RELATÓRIO DE CAIXA ---
         document.getElementById('generateCashReportBtn').addEventListener('click', function() {
             const startDate = document.getElementById('cashReportStartDate').value;
             const endDate = document.getElementById('cashReportEndDate').value;
@@ -108,9 +131,13 @@
                     container.innerHTML = '';
                     
                     for (const [operator, values] of Object.entries(data.operators)) {
+                        const avgTicket = values.VendasCount > 0 ? (values.Total / values.VendasCount).toFixed(2) : "0.00";
                         const card = `
                             <div class="card border-dark mb-3">
-                                <div class="card-header bg-light"><strong>Operador: ${operator}</strong></div>
+                                <div class="card-header bg-light d-flex justify-content-between">
+                                    <strong>Operador: ${operator}</strong>
+                                    <span>Vendas: ${values.VendasCount}</span>
+                                </div>
                                 <div class="card-body p-2">
                                     <table class="table table-sm table-bordered mb-0" style="font-size: 0.9rem;">
                                         <tr><td>Dinheiro</td><td class="text-end">R$ ${values.Dinheiro.toFixed(2)}</td></tr>
@@ -118,6 +145,7 @@
                                         <tr><td>Cartão Débito</td><td class="text-end">R$ ${values['Cartao Debito'].toFixed(2)}</td></tr>
                                         <tr><td>Pix</td><td class="text-end">R$ ${values.Pix.toFixed(2)}</td></tr>
                                         <tr class="table-secondary"><td><strong>Total</strong></td><td class="text-end"><strong>R$ ${values.Total.toFixed(2)}</strong></td></tr>
+                                        <tr class="table-info"><td><strong>Ticket Médio</strong></td><td class="text-end"><strong>R$ ${avgTicket}</strong></td></tr>
                                     </table>
                                 </div>
                             </div>
@@ -134,7 +162,6 @@
 
         document.getElementById('printCashReportBtn').addEventListener('click', () => printDiv('printableCashArea', 'Relatório de Fechamento de Caixa'));
 
-        // --- RELATÓRIO DE ESTOQUE ---
         document.getElementById('generateStockReportBtn').addEventListener('click', function() {
             fetch('/reports/stock')
                 .then(response => response.json())
@@ -160,6 +187,26 @@
         });
 
         document.getElementById('printStockReportBtn').addEventListener('click', () => printDiv('printableStockArea', 'Relatório de Inventário de Estoque'));
+
+        document.getElementById('generateTopBtn').addEventListener('click', function() {
+            fetch('/reports/top_products')
+                .then(response => response.json())
+                .then(data => {
+                    const body = document.getElementById('topProductsBody');
+                    body.innerHTML = '';
+                    data.forEach((p, index) => {
+                        body.insertAdjacentHTML('beforeend', `
+                            <tr>
+                                <td>${index + 1}º</td>
+                                <td>${p.name}</td>
+                                <td>${p.quantity}</td>
+                                <td class="text-end">R$ ${p.revenue.toFixed(2)}</td>
+                            </tr>
+                        `);
+                    });
+                    document.getElementById('topProductsContainer').style.display = 'block';
+                });
+        });
     });
 </script>
 {% endblock %}

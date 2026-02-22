@@ -59,8 +59,12 @@ def dashboard():
 @main_bp.route('/reports/top_products')
 @admin_required
 def top_products_api():
-    top_products_data = db.session.query(Product.name, func.sum(SaleItem.quantity).label('quantity')).join(SaleItem).group_by(Product.id).order_by(func.sum(SaleItem.quantity).desc()).limit(5).all()
-    return jsonify([{'name': p.name, 'quantity': int(p.quantity)} for p in top_products_data])
+    top_products_data = db.session.query(
+        Product.name, 
+        func.sum(SaleItem.quantity).label('quantity'),
+        func.sum(SaleItem.quantity * SaleItem.price_at_sale).label('revenue')
+    ).join(SaleItem).group_by(Product.id).order_by(func.sum(SaleItem.quantity).desc()).limit(10).all()
+    return jsonify([{'name': p.name, 'quantity': int(p.quantity), 'revenue': float(p.revenue)} for p in top_products_data])
 
 @main_bp.route('/reports/daily_sales')
 @admin_required
@@ -86,10 +90,12 @@ def cash_flow_api():
     total_general = 0
     for sale in sales:
         op_name = sale.operator.username
-        if op_name not in operators_data: operators_data[op_name] = {'Dinheiro': 0, 'Cartao Credito': 0, 'Cartao Debito': 0, 'Pix': 0, 'Total': 0}
+        if op_name not in operators_data: 
+            operators_data[op_name] = {'Dinheiro': 0, 'Cartao Credito': 0, 'Cartao Debito': 0, 'Pix': 0, 'Total': 0, 'VendasCount': 0}
         method = sale.payment_method
         if method in operators_data[op_name]: operators_data[op_name][method] += sale.total_amount
         operators_data[op_name]['Total'] += sale.total_amount
+        operators_data[op_name]['VendasCount'] += 1
         total_general += sale.total_amount
     return jsonify({'operators': operators_data, 'total_general': float(total_general)})
 
@@ -145,7 +151,6 @@ def edit_product(product_id):
 @admin_required
 def delete_product(product_id):
     product = Product.query.get_or_404(product_id)
-    # Verifica se o produto possui itens vinculados a alguma venda
     has_sales = SaleItem.query.filter_by(product_id=product_id).first()
     if has_sales:
         flash('Não é possível excluir este produto pois ele possui vendas registradas. Você pode apenas editá-lo.', 'danger')
@@ -159,7 +164,7 @@ def delete_product(product_id):
 @main_bp.route('/products/import', methods=['GET', 'POST'])
 @admin_required
 def import_products():
-    import pandas as pd # A importação fica apenas aqui
+    import pandas as pd
     form = ProductImportForm()
     imported_products_data = []
     if form.validate_on_submit():
@@ -198,7 +203,6 @@ def pdv_checkout():
         db.session.add(new_sale)
         db.session.flush()
         
-        # Formata a data e hora atual para o cupom
         current_time_str = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         
         all_receipts = []
@@ -245,7 +249,6 @@ def delete_user(user_id):
         flash('Não é possível excluir o administrador principal.', 'danger')
         return redirect(url_for('main.users'))
     
-    # Verifica se o usuário possui vendas registradas
     has_sales = Sale.query.filter_by(user_id=user_id).first()
     if has_sales:
         flash('Não é possível excluir este usuário pois ele possui vendas registradas. Você pode apenas editá-lo.', 'danger')
