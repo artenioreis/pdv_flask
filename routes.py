@@ -145,6 +145,12 @@ def edit_product(product_id):
 @admin_required
 def delete_product(product_id):
     product = Product.query.get_or_404(product_id)
+    # Verifica se o produto possui itens vinculados a alguma venda
+    has_sales = SaleItem.query.filter_by(product_id=product_id).first()
+    if has_sales:
+        flash('Não é possível excluir este produto pois ele possui vendas registradas. Você pode apenas editá-lo.', 'danger')
+        return redirect(url_for('main.products'))
+    
     db.session.delete(product)
     db.session.commit()
     flash('Produto excluído com sucesso!', 'success')
