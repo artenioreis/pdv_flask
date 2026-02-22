@@ -150,7 +150,7 @@ def delete_product(product_id):
     if has_sales:
         flash('Não é possível excluir este produto pois ele possui vendas registradas. Você pode apenas editá-lo.', 'danger')
         return redirect(url_for('main.products'))
-    
+        
     db.session.delete(product)
     db.session.commit()
     flash('Produto excluído com sucesso!', 'success')
@@ -240,6 +240,13 @@ def delete_user(user_id):
     if user.username == 'admin':
         flash('Não é possível excluir o administrador principal.', 'danger')
         return redirect(url_for('main.users'))
+    
+    # Verifica se o usuário possui vendas registradas
+    has_sales = Sale.query.filter_by(user_id=user_id).first()
+    if has_sales:
+        flash('Não é possível excluir este usuário pois ele possui vendas registradas. Você pode apenas editá-lo.', 'danger')
+        return redirect(url_for('main.users'))
+        
     db.session.delete(user)
     db.session.commit()
     flash('Usuário excluído com sucesso!', 'success')
