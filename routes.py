@@ -66,6 +66,39 @@ def top_products_api():
     ).join(SaleItem).group_by(Product.id).order_by(func.sum(SaleItem.quantity).desc()).limit(10).all()
     return jsonify([{'name': p.name, 'quantity': int(p.quantity), 'revenue': float(p.revenue)} for p in top_products_data])
 
+@main_bp.route('/reports/abc_curve')
+@admin_required
+def abc_curve_api():
+    # Busca todos os produtos e sua receita total
+    data = db.session.query(
+        Product.name,
+        func.sum(SaleItem.quantity * SaleItem.price_at_sale).label('revenue')
+    ).join(SaleItem).group_by(Product.id).order_by(func.sum(SaleItem.quantity * SaleItem.price_at_sale).desc()).all()
+    
+    total_revenue = sum(p.revenue for p in data) if data else 0
+    abc_data = []
+    cumulative_revenue = 0
+    
+    for p in data:
+        cumulative_revenue += p.revenue
+        percentage = (cumulative_revenue / total_revenue * 100) if total_revenue > 0 else 0
+        
+        if percentage <= 80:
+            category = 'A'
+        elif percentage <= 95:
+            category = 'B'
+        else:
+            category = 'C'
+            
+        abc_data.append({
+            'name': p.name,
+            'revenue': float(p.revenue),
+            'cumulative_percentage': float(percentage),
+            'category': category
+        })
+        
+    return jsonify(abc_data)
+
 @main_bp.route('/reports/daily_sales')
 @admin_required
 def daily_sales_api():
@@ -85,18 +118,37 @@ def cash_flow_api():
     query = Sale.query
     if start_date: query = query.filter(Sale.timestamp >= datetime.strptime(start_date, '%Y-%m-%d'))
     if end_date: query = query.filter(Sale.timestamp < datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1))
-    sales = query.all()
+    
+    sales = query.order_by(Sale.timestamp.asc()).all()
     operators_data = {}
     total_general = 0
+    
     for sale in sales:
         op_name = sale.operator.username
         if op_name not in operators_data: 
-            operators_data[op_name] = {'Dinheiro': 0, 'Cartao Credito': 0, 'Cartao Debito': 0, 'Pix': 0, 'Total': 0, 'VendasCount': 0}
+            operators_data[op_name] = {
+                'Dinheiro': 0, 'Cartao Credito': 0, 'Cartao Debito': 0, 'Pix': 0, 
+                'Total': 0, 'VendasCount': 0, 'detalhes': []
+            }
+        
         method = sale.payment_method
-        if method in operators_data[op_name]: operators_data[op_name][method] += sale.total_amount
+        if method in operators_data[op_name]: 
+            operators_data[op_name][method] += sale.total_amount
+            
         operators_data[op_name]['Total'] += sale.total_amount
         operators_data[op_name]['VendasCount'] += 1
         total_general += sale.total_amount
+        
+        for item in sale.items:
+            operators_data[op_name]['detalhes'].append({
+                'hora': sale.timestamp.strftime('%H:%M:%S'),
+                'data': sale.timestamp.strftime('%d/%m/%Y'),
+                'produto': item.product.name,
+                'quantidade': item.quantity,
+                'valor': float(item.price_at_sale * item.quantity),
+                'metodo': sale.payment_method
+            })
+            
     return jsonify({'operators': operators_data, 'total_general': float(total_general)})
 
 @main_bp.route('/reports/stock')

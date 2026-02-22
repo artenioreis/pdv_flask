@@ -1,74 +1,66 @@
 {# templates/reports.html #}
 {% extends "base.html" %}
-{% block title %}Relatórios Estratégicos{% endblock %}
+{% block title %}Relatórios Administrativos Estratégicos{% endblock %}
 {% block content %}
 <div class="container-fluid">
-    <h1 class="mb-4">Relatórios de Gestão e BI</h1>
+    <h1 class="mb-4">Relatórios de Caixa, Inventário e Curva ABC</h1>
 
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card mb-4 shadow-sm">
-                <div class="card-header bg-primary text-white">
-                    <i class="fas fa-cash-register me-1"></i> Fechamento de Caixa por Operador
+    <div class="card mb-4 shadow-sm border-primary">
+        <div class="card-header bg-primary text-white">
+            <i class="fas fa-filter me-1"></i> Filtros de Relatório por Operador
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-5">
+                    <label class="form-label">Data Inicial:</label>
+                    <input type="date" class="form-control" id="cashReportStartDate">
                 </div>
-                <div class="card-body">
-                    <div class="row g-3 mb-3">
-                        <div class="col">
-                            <label class="form-label">Data Inicial:</label>
-                            <input type="date" class="form-control" id="cashReportStartDate">
-                        </div>
-                        <div class="col">
-                            <label class="form-label">Data Final:</label>
-                            <input type="date" class="form-control" id="cashReportEndDate">
-                        </div>
-                    </div>
-                    <button class="btn btn-primary w-100 mb-2" id="generateCashReportBtn">Gerar Relatório</button>
-                    <button class="btn btn-outline-secondary w-100" id="printCashReportBtn" style="display: none;">
-                        <i class="fas fa-print"></i> Imprimir Relatório de Caixa
-                    </button>
-
-                    <div id="cashReportResults" class="mt-4" style="display: none;">
-                        <div id="printableCashArea">
-                            <h5 class="text-center">Resumo de Vendas por Operador</h5>
-                            <hr>
-                            <div id="operatorTablesContainer"></div>
-                            <div class="alert alert-info mt-3">
-                                <strong>TOTAL GERAL CONSOLIDADO: R$ <span id="totalGeneralAmount">0.00</span></strong>
-                            </div>
-                        </div>
-                    </div>
+                <div class="col-md-5">
+                    <label class="form-label">Data Final:</label>
+                    <input type="date" class="form-control" id="cashReportEndDate">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" id="generateCashReportBtn">Gerar Relatórios</button>
                 </div>
             </div>
         </div>
+    </div>
 
-        <div class="col-md-6">
-            <div class="card mb-4 shadow-sm">
-                <div class="card-header bg-success text-white">
-                    <i class="fas fa-boxes me-1"></i> Inventário e Valor de Ativo em Estoque
+    <div id="cashReportResults" style="display: none;">
+        <div id="operatorReportsContainer"></div>
+        <div class="alert alert-dark mt-4 text-end">
+            <h4>FATURAMENTO TOTAL CONSOLIDADO: R$ <span id="totalGeneralAmount">0.00</span></h4>
+        </div>
+    </div>
+
+    <hr class="my-5">
+
+    <div class="row mb-5">
+        <div class="col-md-12">
+            <div class="card shadow-sm border-warning">
+                <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-chart-pie me-1"></i> Análise de Curva ABC (Lucratividade por Produto)</span>
+                    <button class="btn btn-sm btn-outline-dark no-print" id="printABCReportBtn" style="display: none;">
+                        <i class="fas fa-print"></i> Imprimir Curva ABC
+                    </button>
                 </div>
                 <div class="card-body">
-                    <button class="btn btn-success w-100 mb-2" id="generateStockReportBtn">Gerar Inventário</button>
-                    <button class="btn btn-outline-secondary w-100" id="printStockReportBtn" style="display: none;">
-                        <i class="fas fa-print"></i> Imprimir Inventário
-                    </button>
-
-                    <div id="stockReportResults" class="mt-4" style="display: none;">
-                        <div id="printableStockArea">
-                            <h5 class="text-center">Relatório de Ativo Circulante (Estoque)</h5>
-                            <table class="table table-sm table-striped mt-3">
+                    <p class="text-muted small">A Classificação ABC identifica os produtos que geram maior impacto financeiro (Classe A = 80% da receita).</p>
+                    <button class="btn btn-warning mb-3" id="generateABCReportBtn">Gerar Análise ABC</button>
+                    
+                    <div id="abcReportResults" style="display: none;">
+                        <div id="printableABCArea">
+                            <table class="table table-sm table-hover border-dark">
                                 <thead class="table-dark">
                                     <tr>
+                                        <th>Categoria</th>
                                         <th>Produto</th>
-                                        <th>Qtd</th>
-                                        <th>Custo/Preço</th>
-                                        <th class="text-end">Valor Total</th>
+                                        <th class="text-end">Receita Acumulada</th>
+                                        <th class="text-center">% Acumulada</th>
                                     </tr>
                                 </thead>
-                                <tbody id="stockList"></tbody>
+                                <tbody id="abcList"></tbody>
                             </table>
-                            <div class="alert alert-success mt-3 text-end">
-                                <strong>Capital Total Imobilizado: R$ <span id="totalStockValue">0.00</span></strong>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -77,25 +69,34 @@
     </div>
 
     <div class="row">
-        <div class="col-12">
-            <div class="card mb-4 shadow-sm">
-                <div class="card-header bg-warning text-dark">
-                    <i class="fas fa-chart-line me-1"></i> Performance de Produtos (Curva ABC Simplicada)
+        <div class="col-md-12">
+            <div class="card mb-4 shadow-sm border-success">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-boxes me-1"></i> Inventário de Estoque (Ativos)</span>
+                    <button class="btn btn-sm btn-light no-print" id="printStockReportBtn" style="display: none;">
+                        <i class="fas fa-print"></i> Imprimir Inventário
+                    </button>
                 </div>
                 <div class="card-body">
-                    <button class="btn btn-warning w-100 mb-3" id="generateTopBtn">Analisar Top 10 Produtos</button>
-                    <div id="topProductsContainer" style="display:none;">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Posição</th>
-                                    <th>Produto</th>
-                                    <th>Qtd. Vendida</th>
-                                    <th class="text-end">Receita Total</th>
-                                </tr>
-                            </thead>
-                            <tbody id="topProductsBody"></tbody>
-                        </table>
+                    <button class="btn btn-success mb-3" id="generateStockReportBtn">Gerar Inventário Atualizado</button>
+                    
+                    <div id="stockReportResults" style="display: none;">
+                        <div id="printableStockArea">
+                            <table class="table table-sm table-striped table-bordered border-dark">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Produto</th>
+                                        <th class="text-center">Qtd. em Stock</th>
+                                        <th class="text-center">Preço Unitário</th>
+                                        <th class="text-end">Valor Total em Stock</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stockList"></tbody>
+                            </table>
+                            <div class="alert alert-success mt-2 text-end">
+                                <h5>Valor Total de Mercadoria: R$ <span id="totalStockValue">0.00</span></h5>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -108,16 +109,23 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         
-        function printDiv(divId, title) {
+        // Função Geral para Impressão Separada
+        function printContent(divId, title) {
             const content = document.getElementById(divId).innerHTML;
+            const timestamp = new Date().toLocaleString();
             const win = window.open('', '_blank');
-            win.document.write(`<html><head><title>${title}</title>`);
+            win.document.write('<html><head><title>' + title + '</title>');
             win.document.write('<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">');
-            win.document.write('<style>body{padding:20px;} .alert{border:1px solid #000;} .card{margin-bottom:10px;}</style></head><body>');
-            win.document.write(`<h2 class="text-center">${title}</h2><p class="text-center">Gerado em: ${new Date().toLocaleString()}</p>`);
+            win.document.write('<style>body{padding:40px;} .no-print{display:none;} table{width:100%;} th, td{border:1px solid #333 !important; padding:8px;} .header-print{border-bottom:3px solid #000; margin-bottom:20px; text-align:center;} .cat-A{background-color: #d4edda !important;} .cat-B{background-color: #fff3cd !important;} .cat-C{background-color: #f8d7da !important;}</style></head><body>');
+            win.document.write('<div class="header-print"><h1>' + title.toUpperCase() + '</h1><p>Data de Emissão: ' + timestamp + '</p></div>');
             win.document.write(content);
             win.document.write('</body></html>');
-            setTimeout(() => { win.print(); win.close(); }, 500);
+            setTimeout(() => { win.print(); win.close(); }, 700);
+        }
+
+        // --- RELATÓRIOS DE CAIXA ---
+        window.printOperatorReport = function(divId, operatorName) {
+            printContent(divId, 'Fechamento de Caixa - ' + operatorName);
         }
 
         document.getElementById('generateCashReportBtn').addEventListener('click', function() {
@@ -127,85 +135,104 @@
             fetch(`/reports/cash_flow?start_date=${startDate}&end_date=${endDate}`)
                 .then(response => response.json())
                 .then(data => {
-                    const container = document.getElementById('operatorTablesContainer');
+                    const container = document.getElementById('operatorReportsContainer');
                     container.innerHTML = '';
                     
                     for (const [operator, values] of Object.entries(data.operators)) {
-                        const avgTicket = values.VendasCount > 0 ? (values.Total / values.VendasCount).toFixed(2) : "0.00";
-                        const card = `
-                            <div class="card border-dark mb-3">
-                                <div class="card-header bg-light d-flex justify-content-between">
-                                    <strong>Operador: ${operator}</strong>
-                                    <span>Vendas: ${values.VendasCount}</span>
+                        const safeOpName = operator.replace(/\s+/g, '-');
+                        let detalhesHtml = '';
+                        values.detalhes.forEach(det => {
+                            detalhesHtml += `<tr><td>${det.data} ${det.hora}</td><td>${det.produto}</td><td>${det.quantidade}</td><td>${det.metodo}</td><td class="text-end">R$ ${det.valor.toFixed(2)}</td></tr>`;
+                        });
+
+                        const operatorBlock = `
+                            <div class="card border-dark mb-5 shadow">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0">Operador: <strong>${operator}</strong></h5>
+                                    <button class="btn btn-sm btn-outline-dark no-print" onclick="printOperatorReport('print-area-${safeOpName}', '${operator}')">
+                                        <i class="fas fa-print"></i> Imprimir Caixa de ${operator}
+                                    </button>
                                 </div>
-                                <div class="card-body p-2">
-                                    <table class="table table-sm table-bordered mb-0" style="font-size: 0.9rem;">
-                                        <tr><td>Dinheiro</td><td class="text-end">R$ ${values.Dinheiro.toFixed(2)}</td></tr>
-                                        <tr><td>Cartão Crédito</td><td class="text-end">R$ ${values['Cartao Credito'].toFixed(2)}</td></tr>
-                                        <tr><td>Cartão Débito</td><td class="text-end">R$ ${values['Cartao Debito'].toFixed(2)}</td></tr>
-                                        <tr><td>Pix</td><td class="text-end">R$ ${values.Pix.toFixed(2)}</td></tr>
-                                        <tr class="table-secondary"><td><strong>Total</strong></td><td class="text-end"><strong>R$ ${values.Total.toFixed(2)}</strong></td></tr>
-                                        <tr class="table-info"><td><strong>Ticket Médio</strong></td><td class="text-end"><strong>R$ ${avgTicket}</strong></td></tr>
-                                    </table>
+                                <div class="card-body" id="print-area-${safeOpName}">
+                                    <div class="row">
+                                        <div class="col-md-5">
+                                            <table class="table table-sm table-bordered border-dark">
+                                                <tr class="table-info"><th colspan="2" class="text-center">Resumo de Recebimentos</th></tr>
+                                                <tr><td>Dinheiro</td><td class="text-end">R$ ${values.Dinheiro.toFixed(2)}</td></tr>
+                                                <tr><td>Cartão Crédito</td><td class="text-end">R$ ${values['Cartao Credito'].toFixed(2)}</td></tr>
+                                                <tr><td>Cartão Débito</td><td class="text-end">R$ ${values['Cartao Debito'].toFixed(2)}</td></tr>
+                                                <tr><td>Pix</td><td class="text-end">R$ ${values.Pix.toFixed(2)}</td></tr>
+                                                <tr class="table-dark text-white"><td><strong>SUBTOTAL</strong></td><td class="text-end"><strong>R$ ${values.Total.toFixed(2)}</strong></td></tr>
+                                            </table>
+                                        </div>
+                                        <div class="col-md-7">
+                                            <table class="table table-sm table-hover border">
+                                                <thead class="table-secondary"><tr><th>Hora</th><th>Produto</th><th>Qtd</th><th>Meio</th><th class="text-end">Valor</th></tr></thead>
+                                                <tbody>${detalhesHtml}</tbody>
+                                            </table>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                        `;
-                        container.insertAdjacentHTML('beforeend', card);
+                            </div>`;
+                        container.insertAdjacentHTML('beforeend', operatorBlock);
                     }
-                    
                     document.getElementById('totalGeneralAmount').textContent = data.total_general.toFixed(2);
                     document.getElementById('cashReportResults').style.display = 'block';
-                    document.getElementById('printCashReportBtn').style.display = 'block';
-                })
-                .catch(err => alert('Erro ao buscar dados do caixa.'));
+                });
         });
 
-        document.getElementById('printCashReportBtn').addEventListener('click', () => printDiv('printableCashArea', 'Relatório de Fechamento de Caixa'));
+        // --- RELATÓRIO DE CURVA ABC (NOVO) ---
+        document.getElementById('generateABCReportBtn').addEventListener('click', function() {
+            fetch('/reports/abc_curve')
+                .then(response => response.json())
+                .then(data => {
+                    const list = document.getElementById('abcList');
+                    list.innerHTML = '';
+                    data.forEach(p => {
+                        const rowClass = p.category === 'A' ? 'table-success' : (p.category === 'B' ? 'table-warning' : 'table-danger');
+                        list.insertAdjacentHTML('beforeend', `
+                            <tr class="${rowClass}">
+                                <td class="text-center fw-bold">${p.category}</td>
+                                <td>${p.name}</td>
+                                <td class="text-end">R$ ${p.revenue.toFixed(2)}</td>
+                                <td class="text-center">${p.cumulative_percentage.toFixed(2)}%</td>
+                            </tr>
+                        `);
+                    });
+                    document.getElementById('abcReportResults').style.display = 'block';
+                    document.getElementById('printABCReportBtn').style.display = 'block';
+                });
+        });
 
+        document.getElementById('printABCReportBtn').addEventListener('click', function() {
+            printContent('printableABCArea', 'Relatório de Curva ABC de Produtos');
+        });
+
+        // --- RELATÓRIO DE ESTOQUE ---
         document.getElementById('generateStockReportBtn').addEventListener('click', function() {
             fetch('/reports/stock')
                 .then(response => response.json())
                 .then(data => {
                     const list = document.getElementById('stockList');
                     list.innerHTML = '';
-                    
                     data.products.forEach(p => {
                         list.insertAdjacentHTML('beforeend', `
                             <tr>
                                 <td>${p.name}</td>
-                                <td>${p.stock}</td>
-                                <td>R$ ${p.price.toFixed(2)}</td>
+                                <td class="text-center">${p.stock}</td>
+                                <td class="text-center">R$ ${p.price.toFixed(2)}</td>
                                 <td class="text-end">R$ ${p.value.toFixed(2)}</td>
                             </tr>
                         `);
                     });
-                    
                     document.getElementById('totalStockValue').textContent = data.total_value.toFixed(2);
                     document.getElementById('stockReportResults').style.display = 'block';
                     document.getElementById('printStockReportBtn').style.display = 'block';
                 });
         });
 
-        document.getElementById('printStockReportBtn').addEventListener('click', () => printDiv('printableStockArea', 'Relatório de Inventário de Estoque'));
-
-        document.getElementById('generateTopBtn').addEventListener('click', function() {
-            fetch('/reports/top_products')
-                .then(response => response.json())
-                .then(data => {
-                    const body = document.getElementById('topProductsBody');
-                    body.innerHTML = '';
-                    data.forEach((p, index) => {
-                        body.insertAdjacentHTML('beforeend', `
-                            <tr>
-                                <td>${index + 1}º</td>
-                                <td>${p.name}</td>
-                                <td>${p.quantity}</td>
-                                <td class="text-end">R$ ${p.revenue.toFixed(2)}</td>
-                            </tr>
-                        `);
-                    });
-                    document.getElementById('topProductsContainer').style.display = 'block';
-                });
+        document.getElementById('printStockReportBtn').addEventListener('click', function() {
+            printContent('printableStockArea', 'Relatório de Inventário de Estoque');
         });
     });
 </script>
