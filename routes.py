@@ -5,18 +5,15 @@ from forms import LoginForm, ProductForm, UserForm, ProductImportForm
 from datetime import datetime, timedelta, date
 import json
 from functools import wraps
-import pandas as pd
 import io
 import time
 from sqlalchemy import or_, func
 from werkzeug.security import generate_password_hash 
 
-# Importar as classes de modelo
 from models import User, Product, Sale, SaleItem
 
 main_bp = Blueprint('main', __name__)
 
-# --- Decoradores ---
 def admin_required(f):
     @wraps(f)
     @login_required
@@ -27,7 +24,6 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# --- Autenticação ---
 @main_bp.route('/', methods=['GET', 'POST'])
 @main_bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -57,32 +53,18 @@ def dashboard():
     today = datetime.utcnow().date()
     total_sales_today = Sale.query.filter(func.date(Sale.timestamp) == today).count()
     total_revenue_today = db.session.query(func.sum(Sale.total_amount)).filter(func.date(Sale.timestamp) == today).scalar() or 0
-    
-    # Alerta de estoque baixo (Ex: unidades <= 5)
     low_stock_count = Product.query.filter(Product.stock <= 5).count()
-    
-    return render_template('dashboard.html', 
-                           total_products=total_products, 
-                           total_sales_today=total_sales_today, 
-                           total_revenue_today=total_revenue_today,
-                           low_stock_count=low_stock_count)
+    return render_template('dashboard.html', total_products=total_products, total_sales_today=total_sales_today, total_revenue_today=total_revenue_today, low_stock_count=low_stock_count)
 
-# --- APIs para Gráficos e Relatórios ---
 @main_bp.route('/reports/top_products')
 @admin_required
 def top_products_api():
-    # Top 5 produtos por quantidade vendida
-    top_products_data = db.session.query(
-        Product.name,
-        func.sum(SaleItem.quantity).label('quantity')
-    ).join(SaleItem).group_by(Product.id).order_by(func.sum(SaleItem.quantity).desc()).limit(5).all()
-    
+    top_products_data = db.session.query(Product.name, func.sum(SaleItem.quantity).label('quantity')).join(SaleItem).group_by(Product.id).order_by(func.sum(SaleItem.quantity).desc()).limit(5).all()
     return jsonify([{'name': p.name, 'quantity': int(p.quantity)} for p in top_products_data])
 
 @main_bp.route('/reports/daily_sales')
 @admin_required
 def daily_sales_api():
-    # Receita dos últimos 7 dias
     today = datetime.utcnow().date()
     sales_data = []
     for i in range(6, -1, -1):
@@ -96,30 +78,19 @@ def daily_sales_api():
 def cash_flow_api():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
-    
     query = Sale.query
-    if start_date:
-        query = query.filter(Sale.timestamp >= datetime.strptime(start_date, '%Y-%m-%d'))
-    if end_date:
-        query = query.filter(Sale.timestamp < datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1))
-    
+    if start_date: query = query.filter(Sale.timestamp >= datetime.strptime(start_date, '%Y-%m-%d'))
+    if end_date: query = query.filter(Sale.timestamp < datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1))
     sales = query.all()
     operators_data = {}
     total_general = 0
-    
     for sale in sales:
         op_name = sale.operator.username
-        if op_name not in operators_data:
-            operators_data[op_name] = {'Dinheiro': 0, 'Cartao Credito': 0, 'Cartao Debito': 0, 'Pix': 0, 'Total': 0}
-        
+        if op_name not in operators_data: operators_data[op_name] = {'Dinheiro': 0, 'Cartao Credito': 0, 'Cartao Debito': 0, 'Pix': 0, 'Total': 0}
         method = sale.payment_method
-        # Normalização simples para bater com as chaves do dicionário
-        if method in operators_data[op_name]:
-            operators_data[op_name][method] += sale.total_amount
-        
+        if method in operators_data[op_name]: operators_data[op_name][method] += sale.total_amount
         operators_data[op_name]['Total'] += sale.total_amount
         total_general += sale.total_amount
-        
     return jsonify({'operators': operators_data, 'total_general': float(total_general)})
 
 @main_bp.route('/reports/stock')
@@ -128,20 +99,12 @@ def stock_report_api():
     products = Product.query.all()
     product_list = []
     total_value = 0
-    
     for p in products:
         val = p.price * p.stock
-        product_list.append({
-            'name': p.name,
-            'stock': p.stock,
-            'price': float(p.price),
-            'value': float(val)
-        })
+        product_list.append({'name': p.name, 'stock': p.stock, 'price': float(p.price), 'value': float(val)})
         total_value += val
-        
     return jsonify({'products': product_list, 'total_value': float(total_value)})
 
-# --- Gerenciamento de Produtos ---
 @main_bp.route('/products')
 @admin_required
 def products():
@@ -153,17 +116,9 @@ def add_product():
     form = ProductForm()
     if form.validate_on_submit():
         barcode_val = form.barcode.data.strip() if form.barcode.data else ""
-        if not barcode_val:
-            barcode_val = f"INT-{int(time.time())}"
-        new_product = Product(
-            name=form.name.data,
-            description=form.description.data,
-            price=form.price.data,
-            stock=form.stock.data,
-            barcode=barcode_val
-        )
-        if form.return_alert_days.data:
-            new_product.return_alert_days = form.return_alert_days.data
+        if not barcode_val: barcode_val = f"INT-{int(time.time())}"
+        new_product = Product(name=form.name.data, description=form.description.data, price=form.price.data, stock=form.stock.data, barcode=barcode_val)
+        if form.return_alert_days.data: new_product.return_alert_days = form.return_alert_days.data
         try:
             db.session.add(new_product)
             db.session.commit()
@@ -181,8 +136,7 @@ def edit_product(product_id):
     form = ProductForm(obj=product)
     if form.validate_on_submit():
         form.populate_obj(product)
-        if not product.barcode or not product.barcode.strip():
-            product.barcode = f"INT-{int(time.time())}"
+        if not product.barcode or not product.barcode.strip(): product.barcode = f"INT-{int(time.time())}"
         db.session.commit()
         return redirect(url_for('main.products'))
     return render_template('add_edit_product.html', title='Editar Produto', form=form)
@@ -199,6 +153,7 @@ def delete_product(product_id):
 @main_bp.route('/products/import', methods=['GET', 'POST'])
 @admin_required
 def import_products():
+    import pandas as pd # A importação fica apenas aqui
     form = ProductImportForm()
     imported_products_data = []
     if form.validate_on_submit():
@@ -209,13 +164,10 @@ def import_products():
                 df.rename(columns={'Nome': 'name', 'Preço': 'price', 'Estoque': 'stock', 'Código': 'barcode'}, inplace=True)
                 for index, row in df.iterrows():
                     imported_products_data.append({'name': row.get('name'), 'price': row.get('price'), 'stock': row.get('stock'), 'barcode': row.get('barcode') or f"IMP-{int(time.time())}-{index}"})
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return jsonify({'success': True, 'products': imported_products_data})
-            except Exception as e:
-                flash(f'Erro: {str(e)}', 'danger')
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest': return jsonify({'success': True, 'products': imported_products_data})
+            except Exception as e: flash(f'Erro: {str(e)}', 'danger')
     return render_template('import_products.html', form=form, imported_products_data=imported_products_data)
 
-# --- PDV ---
 @main_bp.route('/pdv')
 @login_required
 def pdv():
@@ -236,13 +188,7 @@ def pdv_search_product():
 def pdv_checkout():
     data = request.get_json()
     try:
-        new_sale = Sale(
-            user_id=current_user.id, 
-            total_amount=data['total_amount'], 
-            payment_method=data['payment_method'], 
-            paid_amount=data['paid_amount'], 
-            change_amount=data['change_amount']
-        )
+        new_sale = Sale(user_id=current_user.id, total_amount=data['total_amount'], payment_method=data['payment_method'], paid_amount=data['paid_amount'], change_amount=data['change_amount'])
         db.session.add(new_sale)
         db.session.flush()
         all_receipts = []
@@ -256,28 +202,13 @@ def pdv_checkout():
             p.stock -= item['quantity']
             for _ in range(item['quantity']):
                 counter += 1
-                all_receipts.append(f"""
-                <div class="receipt-container" style="font-weight: bold; margin-bottom: 70px; text-align: center; font-family: sans-serif;">
-                    <p style="font-size: 1.5em; margin: 0;">HOUSEHOT SWING CLUB</p>
-                    <p style="margin: 5px 0;">VENDA: #{new_sale.id}</p>
-                    <hr style="border-top: 1px dashed #000;">
-                    <p>Item {counter} de {sum(i['quantity'] for i in data['cart'])}</p>
-                    <p style="font-size: 1.6em; border: 2px solid #000; padding: 10px; margin: 10px 0; text-transform: uppercase;">{item['name']}</p>
-                    <p>1 UN x R$ {item['price']:.2f}</p>
-                    <hr style="border-top: 1px dashed #000;">
-                    <p style="font-size: 1.1em;">PAGAMENTO: {data['payment_method']}</p>
-                    <p>VALOR PAGO: R$ {data['paid_amount']:.2f}</p>
-                    <p>TROCO: R$ {data['change_amount']:.2f}</p>
-                    <hr style="border-top: 1px dashed #000;">
-                    <p>Obrigado pela preferência!</p>
-                </div>""")
+                all_receipts.append(f"""<div class="receipt-container" style="font-weight: bold; margin-bottom: 70px; text-align: center; font-family: sans-serif;"><p style="font-size: 1.5em; margin: 0;">HOUSEHOT SWING CLUB</p><p style="margin: 5px 0;">VENDA: #{new_sale.id}</p><hr style="border-top: 1px dashed #000;"><p>Item {counter} de {sum(i['quantity'] for i in data['cart'])}</p><p style="font-size: 1.6em; border: 2px solid #000; padding: 10px; margin: 10px 0; text-transform: uppercase;">{item['name']}</p><p>1 UN x R$ {item['price']:.2f}</p><hr style="border-top: 1px dashed #000;"><p style="font-size: 1.1em;">PAGAMENTO: {data['payment_method']}</p><p>VALOR PAGO: R$ {data['paid_amount']:.2f}</p><p>TROCO: R$ {data['change_amount']:.2f}</p><hr style="border-top: 1px dashed #000;"><p>Obrigado pela preferência!</p></div>""")
         db.session.commit()
         return jsonify({'success': True, 'receipt_htmls': all_receipts})
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)}), 500
 
-# --- Usuários e Relatórios ---
 @main_bp.route('/users')
 @admin_required
 def users():
@@ -289,12 +220,7 @@ def add_user():
     form = UserForm()
     if form.validate_on_submit():
         hp = generate_password_hash(form.password.data, method='pbkdf2:sha256')
-        new_user = User(
-            username=form.username.data, 
-            email=form.email.data, 
-            password_hash=hp, 
-            role=form.role.data
-        )
+        new_user = User(username=form.username.data, email=form.email.data, password_hash=hp, role=form.role.data)
         db.session.add(new_user)
         db.session.commit()
         flash('Usuário adicionado com sucesso!', 'success')
