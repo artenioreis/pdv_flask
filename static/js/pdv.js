@@ -23,7 +23,23 @@
         // Atalhos de Teclado
         document.addEventListener('keydown', e => {
             if (e.key === 'F2') { e.preventDefault(); searchInput.focus(); }
+            if (e.key === 'F4' && !clearCartBtn.disabled) { e.preventDefault(); clearCartBtn.click(); }
             if (e.key === 'F10' && !checkoutBtn.disabled) { e.preventDefault(); checkoutBtn.click(); }
+            
+            // Navegação simples na busca com setas
+            if (searchResults.style.display === 'block') {
+                const items = searchResults.querySelectorAll('li');
+                let active = Array.from(items).indexOf(document.activeElement);
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (active < items.length - 1) items[active + 1].focus();
+                    else items[0].focus();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (active > 0) items[active - 1].focus();
+                    else items[items.length - 1].focus();
+                }
+            }
         });
 
         // Adicionar com Enter
@@ -34,6 +50,28 @@
                 if (first) first.click();
             }
         });
+
+        // Função Global para Ajustar Quantidade
+        window.changeQuantity = function(id, delta) {
+            const item = cart.find(i => i.id === id);
+            if (item) {
+                if (delta > 0) {
+                    // Verifica estoque (precisamos do estoque original que veio na busca)
+                    if (item.quantity < item.stock) {
+                        item.quantity += delta;
+                    } else {
+                        alert('Limite de estoque atingido');
+                    }
+                } else {
+                    item.quantity += delta;
+                    if (item.quantity <= 0) {
+                        removeItem(id);
+                        return;
+                    }
+                }
+                updateCart();
+            }
+        };
 
         // Função Global para Deletar Item
         window.removeItem = function(id) {
@@ -48,7 +86,14 @@
                 const li = document.createElement('li');
                 li.className = 'list-group-item d-flex justify-content-between align-items-center';
                 li.innerHTML = `
-                    <div style="font-weight: bold;">${item.name} (${item.quantity}x)</div>
+                    <div style="font-weight: bold;">
+                        ${item.name}
+                        <div class="mt-1">
+                            <button class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="changeQuantity(${item.id}, -1)">-</button>
+                            <span class="mx-2">${item.quantity}x</span>
+                            <button class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="changeQuantity(${item.id}, 1)">+</button>
+                        </div>
+                    </div>
                     <div>
                         <span class="badge bg-dark me-2">R$ ${(item.price * item.quantity).toFixed(2)}</span>
                         <button class="btn btn-sm btn-danger" onclick="removeItem(${item.id})">X</button>
@@ -101,7 +146,12 @@
         paidAmountInput.oninput = calculateChange;
         paymentMethodSelect.onchange = calculateChange;
 
-        clearCartBtn.onclick = () => { cart = []; updateCart(); };
+        clearCartBtn.onclick = () => { 
+            if(confirm("Deseja realmente limpar o carrinho?")) {
+                cart = []; 
+                updateCart(); 
+            }
+        };
 
         searchInput.oninput = () => {
             const q = searchInput.value.trim();
@@ -112,7 +162,8 @@
                         data.forEach(p => {
                             const li = document.createElement('li');
                             li.className = 'list-group-item list-group-item-action';
-                            li.textContent = `[${p.id}] ${p.name} - R$ ${p.price.toFixed(2)}`;
+                            li.setAttribute('tabindex', '0');
+                            li.textContent = `[${p.id}] ${p.name} - R$ ${p.price.toFixed(2)} (Estoque: ${p.stock})`;
                             li.onclick = () => {
                                 const ex = cart.find(i => i.id === p.id);
                                 if (ex) {
@@ -124,6 +175,8 @@
                                 }
                                 updateCart(); searchInput.value = ''; searchResults.style.display = 'none'; searchInput.focus();
                             };
+                            // Suporte a seleção por teclado nos resultados
+                            li.onkeydown = (e) => { if(e.key === 'Enter') li.click(); };
                             searchResults.appendChild(li);
                         });
                         searchResults.style.display = 'block';
@@ -153,13 +206,9 @@
             .then(r => r.json()).then(res => {
                 if (res.success) {
                     receipts = res.receipt_htmls;
-                    // Insere todos os cupons no modal separados por uma linha visual
                     receiptContent.innerHTML = receipts.join('<hr style="border-top: 2px dashed #000; margin: 30px 0;">');
                     printReceiptModal.show();
-                    
-                    // Dispara a impressão de todos automaticamente
                     printAllReceipts();
-
                     cart = []; 
                     updateCart();
                 } else alert('Erro: ' + res.message);
@@ -170,7 +219,6 @@
         function printAllReceipts() {
             const win = window.open('', '_blank');
             win.document.write('<html><head><title>Imprimir Cupons</title></head><body>');
-            // Adiciona quebra de página entre os cupons para a impressora térmica entender como cortes
             receipts.forEach((html, index) => {
                 win.document.write(html);
                 if (index < receipts.length - 1) {
@@ -180,7 +228,6 @@
             win.document.write('</body></html>');
             win.document.close();
             win.focus();
-            // Pequeno delay para garantir o carregamento do conteúdo antes de abrir o diálogo
             setTimeout(() => {
                 win.print();
                 win.close();
