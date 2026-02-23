@@ -50,7 +50,7 @@ def dashboard():
     if not current_user.is_admin():
         return redirect(url_for('main.pdv'))
     total_products = Product.query.count()
-    today = datetime.utcnow().date()
+    today = datetime.now().date()
     total_sales_today = Sale.query.filter(func.date(Sale.timestamp) == today).count()
     total_revenue_today = db.session.query(func.sum(Sale.total_amount)).filter(func.date(Sale.timestamp) == today).scalar() or 0
     low_stock_count = Product.query.filter(Product.stock <= 5).count()
@@ -102,7 +102,7 @@ def abc_curve_api():
 @main_bp.route('/reports/daily_sales')
 @admin_required
 def daily_sales_api():
-    today = datetime.utcnow().date()
+    today = datetime.now().date()
     sales_data = []
     for i in range(6, -1, -1):
         day = today - timedelta(days=i)

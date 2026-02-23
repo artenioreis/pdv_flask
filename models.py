@@ -48,7 +48,7 @@ class Sale(db.Model):
     payment_method = db.Column(db.String(50), nullable=False)
     paid_amount = db.Column(db.Float, nullable=False)
     change_amount = db.Column(db.Float, nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, default=datetime.now)
 
     items = db.relationship('SaleItem', backref='sale', lazy=True, cascade='all, delete-orphan')
 
