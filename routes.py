@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from extensions import db
-from forms import LoginForm, ProductForm, UserForm, ProductImportForm
+from forms import LoginForm, ProductForm, UserForm
 from datetime import datetime, timedelta, date
 import json
 from functools import wraps
@@ -212,24 +212,6 @@ def delete_product(product_id):
     db.session.commit()
     flash('Produto excluído com sucesso!', 'success')
     return redirect(url_for('main.products'))
-
-@main_bp.route('/products/import', methods=['GET', 'POST'])
-@admin_required
-def import_products():
-    import pandas as pd
-    form = ProductImportForm()
-    imported_products_data = []
-    if form.validate_on_submit():
-        file = form.file.data
-        if file:
-            try:
-                df = pd.read_excel(file) if file.filename.endswith('.xlsx') else pd.read_csv(file)
-                df.rename(columns={'Nome': 'name', 'Preço': 'price', 'Estoque': 'stock', 'Código': 'barcode'}, inplace=True)
-                for index, row in df.iterrows():
-                    imported_products_data.append({'name': row.get('name'), 'price': row.get('price'), 'stock': row.get('stock'), 'barcode': row.get('barcode') or f"IMP-{int(time.time())}-{index}"})
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest': return jsonify({'success': True, 'products': imported_products_data})
-            except Exception as e: flash(f'Erro: {str(e)}', 'danger')
-    return render_template('import_products.html', form=form, imported_products_data=imported_products_data)
 
 @main_bp.route('/pdv')
 @login_required
