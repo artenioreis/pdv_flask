@@ -20,6 +20,8 @@
     --login-bg-gradient-end: #0056b3;
     --login-card-bg: rgba(255, 255, 255, 0.95);
     --login-card-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    /* Nova cor para o fundo do PDV para reduzir fadiga ocular */
+    --pdv-bg: #eef2f7; 
 }
 
 /* Estilos Globais */
@@ -29,6 +31,19 @@ body {
     color: var(--text-dark);
     margin: 0;
     overflow-x: hidden;
+}
+
+/* Fundo específico para a página de PDV e ajuste de tela cheia */
+.pdv-body-bg {
+    background-color: var(--pdv-bg) !important;
+    min-height: 100vh;
+}
+
+.pdv-full-width {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding-left: 20px !important;
+    padding-right: 20px !important;
 }
 
 #wrapper {
