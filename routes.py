@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app, send_file
 from flask_login import login_user, logout_user, login_required, current_user
 from extensions import db
 from forms import LoginForm, ProductForm, UserForm
@@ -7,6 +7,7 @@ import json
 from functools import wraps
 import io
 import time
+import os
 from sqlalchemy import or_, func
 from werkzeug.security import generate_password_hash 
 
@@ -308,3 +309,13 @@ def sales_by_period_report():
     if e_date: query = query.filter(Sale.timestamp < datetime.strptime(e_date, '%Y-%m-%d') + timedelta(days=1))
     sales = query.order_by(Sale.timestamp.desc()).all()
     return render_template('reports_sales_by_period.html', sales=sales, total_sales_count=len(sales), total_revenue=sum(s.total_amount for s in sales), start_date=s_date, end_date=e_date)
+
+@main_bp.route('/backup/download')
+@admin_required
+def download_backup():
+    try:
+        db_path = os.path.join(current_app.instance_path, 'pdv.db')
+        return send_file(db_path, as_attachment=True, download_name=f'backup_pdv_{date.today()}.db')
+    except Exception as e:
+        flash(f'Erro ao gerar backup: {str(e)}', 'danger')
+        return redirect(url_for('main.dashboard'))

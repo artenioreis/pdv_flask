@@ -38,6 +38,9 @@
                 <a href="{{ url_for('main.reports') }}" class="list-group-item list-group-item-action bg-dark text-white">
                     <i class="fas fa-chart-line me-2"></i> Relatórios
                 </a>
+                <a href="{{ url_for('main.download_backup') }}" class="list-group-item list-group-item-action bg-dark text-white">
+                    <i class="fas fa-database me-2"></i> Backup
+                </a>
                 {% endif %}
                 <a href="{{ url_for('main.logout') }}" class="list-group-item list-group-item-action bg-dark text-white">
                     <i class="fas fa-sign-out-alt me-2"></i> Sair
